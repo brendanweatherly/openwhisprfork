@@ -978,6 +978,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         noteId: args.noteId ?? null,
         sessionId,
         autoEndEligible: args.autoEndEligible,
+        selectedOutputDeviceId: localStorage.getItem("meetingOutputDeviceId") || "",
         aecEnabled: getSettings().meetingAecEnabled,
         speakerIndexBase: sessionSpeakerIndexBase,
       });
