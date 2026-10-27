@@ -154,9 +154,11 @@ export const useEnterpriseIdentityStore = create<EnterpriseIdentityState>((set, 
         const enforcementRequired = (error as { enforcementRequired?: boolean })
           .enforcementRequired;
         logger.warn("Managed enterprise AI configuration unavailable", { error: message }, "auth");
-        const lastKnown = current.config
-          ? summarize(current.config)
-          : readPersistedScopes(accountId, workspaceId);
+        // Another identity's config never stands in, even to fail closed.
+        const lastKnown =
+          sameIdentity && current.config
+            ? summarize(current.config)
+            : readPersistedScopes(accountId, workspaceId);
         set({
           status: "error",
           config: null,
