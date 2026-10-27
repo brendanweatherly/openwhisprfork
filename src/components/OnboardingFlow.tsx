@@ -910,7 +910,9 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
           return (
             <div className="min-h-full w-full flex flex-col items-center justify-center gap-4 px-6 text-center">
               <h2 className="text-xl font-semibold">Set up local recording</h2>
-              <p className="max-w-md text-sm text-muted-foreground">Use local transcription and AI models without an OpenWhispr subscription or account.</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Use local transcription and AI models without an OpenWhispr subscription or account.
+              </p>
               <button
                 type="button"
                 className="rounded-lg bg-primary px-5 py-3 text-sm font-medium text-primary-foreground"
