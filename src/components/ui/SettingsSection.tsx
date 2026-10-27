@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsLayout } from "./useSettingsLayout";
 import type { InferenceMode } from "../../types/electron";
+import { LOCAL_ONLY_UI } from "../../config/localOnlyUi";
 
 interface SettingsSectionProps {
   title: string;
@@ -161,7 +162,7 @@ export function InferenceModeSelector({
 
   return (
     <SettingsPanel className="overflow-hidden">
-      {modes.map((mode) => {
+      {modes.filter((mode) => !LOCAL_ONLY_UI || (mode.id !== "openwhispr" && mode.id !== "enterprise")).map((mode) => {
         const isActive = activeMode === mode.id;
         const isDisabled = !!mode.disabled;
         const isDimmed = isDisabled && !mode.signInRequired;
