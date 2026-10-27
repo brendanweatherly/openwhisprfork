@@ -17,6 +17,7 @@ import {
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { AccountAvatar, SettingsSectionType } from "./SettingsPage";
 import { useAuth } from "../hooks/useAuth";
+import { LOCAL_ONLY_UI, isHiddenLocalOnlySettingsSection } from "../config/localOnlyUi";
 
 export type { SettingsSectionType };
 
@@ -138,12 +139,15 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         group: t("settingsModal.groups.system"),
       },
     ];
-    return isSignedIn ? items : items.filter((item) => item.id !== "workspace");
+    return LOCAL_ONLY_UI
+      ? items.filter((item) => !isHiddenLocalOnlySettingsSection(item.id))
+      : isSignedIn ? items : items.filter((item) => item.id !== "workspace");
   }, [t, isSignedIn]);
 
   const resolveSection = (section: string | undefined): SettingsSectionType => {
-    if (!section) return "account";
-    return (SECTION_ALIASES[section] ?? section) as SettingsSectionType;
+    if (!section) return LOCAL_ONLY_UI ? "general" : "account";
+    const resolved = (SECTION_ALIASES[section] ?? section) as SettingsSectionType;
+    return isHiddenLocalOnlySettingsSection(resolved) ? "general" : resolved;
   };
 
   const [activeSection, setActiveSection] = React.useState<SettingsSectionType>(() =>
@@ -177,7 +181,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
       activeSection={activeSection}
       onSectionChange={handleSectionChange}
       header={
-        isSignedIn && user ? (
+        !LOCAL_ONLY_UI && isSignedIn && user ? (
           <div className="flex flex-col items-center gap-2 pb-2 text-center">
             <AccountAvatar image={user.image} name={user.name || t("settingsPage.account.user")} />
             <div className="min-w-0 w-full">
@@ -192,7 +196,7 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         ) : undefined
       }
       notice={
-        policyManaged
+        !LOCAL_ONLY_UI && policyManaged
           ? {
               icon: <ShieldCheck className="h-3.5 w-3.5 shrink-0" />,
               label: t("settingsModal.managedAccount"),
