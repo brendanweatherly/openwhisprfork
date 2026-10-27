@@ -159,10 +159,13 @@ export function InferenceModeSelector({
   onSelect: (mode: InferenceMode) => void;
 }) {
   const { t } = useTranslation();
+  const visibleModes = LOCAL_ONLY_UI
+    ? modes.filter((mode) => mode.id !== "openwhispr" && mode.id !== "enterprise")
+    : modes;
 
   return (
     <SettingsPanel className="overflow-hidden">
-      {modes.filter((mode) => !LOCAL_ONLY_UI || (mode.id !== "openwhispr" && mode.id !== "enterprise")).map((mode) => {
+      {visibleModes.map((mode) => {
         const isActive = activeMode === mode.id;
         const isDisabled = !!mode.disabled;
         const isDimmed = isDisabled && !mode.signInRequired;
