@@ -168,8 +168,9 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
   }
 
   const handleSectionChange = (section: SettingsSectionType, subTab?: string) => {
-    setActiveSection(section);
-    setInitialSubTab(subTab);
+    // Deep links and other UI callbacks must not reopen hidden paid/account pages.
+    setActiveSection(resolveSection(section));
+    setInitialSubTab(isHiddenLocalOnlySettingsSection(section) ? undefined : subTab);
   };
 
   return (
