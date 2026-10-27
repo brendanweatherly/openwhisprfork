@@ -14,6 +14,7 @@ import {
   Zap,
 } from "../icons";
 import { useTranslation } from "react-i18next";
+import { LOCAL_ONLY_UI } from "../../config/localOnlyUi";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../ui/dialog";
 import { usePolicySnapshot } from "../../hooks/usePolicy";
 import {
@@ -293,7 +294,7 @@ export default function SetupChoiceStep({
           </SetupCard>
         )}
 
-        {cloudAllowed && (
+        {!LOCAL_ONLY_UI && cloudAllowed && (
           <SetupCard>
             {/* "Vector 1": a 343x183 wash pinned to the bottom of the cloud card.
                 Approximated with a gradient — the Figma vector was not exported. */}
@@ -517,7 +518,7 @@ export default function SetupChoiceStep({
           {/* The escape hatch is secondary on the left; proceeding with the mode
               the user selected is primary on the right. */}
           <div className="flex gap-2.5">
-            {cloudAllowed && (
+            {!LOCAL_ONLY_UI && cloudAllowed && (
               <CardAction
                 className="flex-1"
                 onClick={() => {
