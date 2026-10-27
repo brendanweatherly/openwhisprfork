@@ -949,12 +949,14 @@ export default function ControlPanel({ initialSettingsSection }: ControlPanelPro
         onOk={() => {}}
       />
 
-      {!LOCAL_ONLY_UI && <UpgradePrompt
-        open={showUpgradePrompt}
-        onOpenChange={setShowUpgradePrompt}
-        wordsUsed={limitData?.wordsUsed}
-        limit={limitData?.limit}
-      />}
+      {!LOCAL_ONLY_UI && (
+        <UpgradePrompt
+          open={showUpgradePrompt}
+          onOpenChange={setShowUpgradePrompt}
+          wordsUsed={limitData?.wordsUsed}
+          limit={limitData?.limit}
+        />
+      )}
 
       <PostMigrationOnboarding
         open={showPostMigration}
