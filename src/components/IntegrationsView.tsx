@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { LOCAL_ONLY_UI } from "../config/localOnlyUi";
 import { Plus } from "./icons";
 import { Button } from "./ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
@@ -72,6 +73,7 @@ export default function IntegrationsView({
 
   // The nav counts connected logins on every section, not only once Connectors has mounted.
   useEffect(() => {
+    if (LOCAL_ONLY_UI) return;
     void ensureConnectorStatus();
   }, []);
 
@@ -172,6 +174,11 @@ export default function IntegrationsView({
     ),
     cli: <CliPane title={titleOf("cli")} isPaid={isPaid} onUpgrade={onUpgrade} />,
   };
+
+  // Paid connector/API/MCP/CLI controls are hidden; free calendar integration stays available.
+  if (LOCAL_ONLY_UI) {
+    return <div className="h-full overflow-y-auto px-6 py-6"><CalendarsPane title={titleOf("calendars")} /></div>;
+  }
 
   return (
     <div className="@container flex h-full min-h-0">
