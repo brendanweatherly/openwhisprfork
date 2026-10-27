@@ -139,9 +139,10 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         group: t("settingsModal.groups.system"),
       },
     ];
-    return LOCAL_ONLY_UI
-      ? items.filter((item) => !isHiddenLocalOnlySettingsSection(item.id))
-      : isSignedIn ? items : items.filter((item) => item.id !== "workspace");
+    if (LOCAL_ONLY_UI) {
+      return items.filter((item) => !isHiddenLocalOnlySettingsSection(item.id));
+    }
+    return isSignedIn ? items : items.filter((item) => item.id !== "workspace");
   }, [t, isSignedIn]);
 
   const resolveSection = (section: string | undefined): SettingsSectionType => {
