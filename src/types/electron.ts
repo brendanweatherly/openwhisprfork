@@ -3280,6 +3280,7 @@ declare global {
         model?: string;
         language?: string;
       }) => Promise<{ success: boolean; alreadyPrepared?: boolean } & PolicyFailureMetadata>;
+      listWindowsOutputDevices?: () => Promise<Array<{id: string; name: string; isDefault: boolean}>>;
       meetingTranscriptionStart?: (options: {
         provider?: string;
         model?: string;
@@ -3287,6 +3288,7 @@ declare global {
         noteId?: number | null;
         sessionId: string;
         autoEndEligible: boolean;
+        selectedOutputDeviceId?: string;
         aecEnabled?: boolean;
         speakerIndexBase?: number;
       }) => Promise<

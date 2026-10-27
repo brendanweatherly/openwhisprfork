@@ -346,6 +346,8 @@ static HRESULT activate_process_loopback(
     return S_OK;
 }
 
+#include "windows-selected-endpoint.h"
+
 /* ========================================================================
  * Silent-capture detection
  *
@@ -434,7 +436,7 @@ static BOOL write_silence(size_t frames)
     return TRUE;
 }
 
-static int run_capture(DWORD excludePid, UINT32 sampleRate)
+static int run_capture(DWORD excludePid, UINT32 sampleRate, const WCHAR *deviceId)
 {
     IAudioClient *audioClient = NULL;
     IAudioCaptureClient *captureClient = NULL;
@@ -454,7 +456,8 @@ static int run_capture(DWORD excludePid, UINT32 sampleRate)
     HRESULT hr;
     int exitCode = 0;
 
-    hr = activate_process_loopback(excludePid, sampleRate, &audioClient, &errorCode);
+    hr = deviceId ? activate_endpoint_loopback(deviceId, sampleRate, &audioClient, &errorCode)
+                  : activate_process_loopback(excludePid, sampleRate, &audioClient, &errorCode);
     if (FAILED(hr)) {
         emit_event("error", errorCode, "Process loopback activation failed (hr=0x%08lx)",
                    (unsigned long)hr);
@@ -622,7 +625,7 @@ static int run_capture(DWORD excludePid, UINT32 sampleRate)
                 endpointAudibleTicks = 0;
             } else if (++endpointAudibleTicks >= CAPTURE_SILENT_CONFIRM_TICKS) {
                 silenceDetectionArmed = FALSE;
-                emit_event("warning", "capture_silent",
+                emit_event("warning", deviceId ? "selected_output_silent" : "capture_silent",
                            "Process loopback captured silence while a render endpoint was playing");
             }
             capturedAudibleThisTick = FALSE;
@@ -695,11 +698,12 @@ int main(int argc, char *argv[])
     const char *command = argc > 1 ? argv[1] : NULL;
     DWORD excludePid = GetCurrentProcessId();
     UINT32 sampleRate = DEFAULT_SAMPLE_RATE;
+    WCHAR deviceId[1024] = {0};
     HRESULT hr;
     int exitCode;
     int i;
 
-    if (!command || (strcmp(command, "probe") != 0 && strcmp(command, "start") != 0)) {
+    if (!command || (strcmp(command, "probe") != 0 && strcmp(command, "start") != 0 && strcmp(command, "list-devices") != 0)) {
         fprintf(stderr, "Usage: windows-system-audio-helper <probe|start> "
                         "[--exclude-pid N] [--sample-rate N]\n");
         return 1;
@@ -710,6 +714,9 @@ int main(int argc, char *argv[])
             excludePid = (DWORD)strtoul(argv[++i], NULL, 10);
         } else if (strcmp(argv[i], "--sample-rate") == 0) {
             sampleRate = (UINT32)strtoul(argv[++i], NULL, 10);
+        } else if (strcmp(argv[i], "--device-id") == 0) {
+            if (!MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, argv[++i], -1,
+                deviceId, (int)(sizeof(deviceId) / sizeof(deviceId[0])))) return 1;
         }
     }
     if (excludePid == 0 || sampleRate == 0) {
@@ -730,6 +737,8 @@ int main(int argc, char *argv[])
 
     if (strcmp(command, "probe") == 0) {
         exitCode = run_probe();
+    } else if (strcmp(command, "list-devices") == 0) {
+        exitCode = run_list_devices();
     } else {
         _setmode(_fileno(stdout), _O_BINARY);
         SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
@@ -739,7 +748,7 @@ int main(int argc, char *argv[])
         } else {
             emit_event("warning", "stdin_monitor_failed", "Parent-death detection unavailable");
         }
-        exitCode = run_capture(excludePid, sampleRate);
+        exitCode = run_capture(excludePid, sampleRate, deviceId[0] ? deviceId : NULL);
     }
 
     CoUninitialize();

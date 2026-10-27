@@ -6349,6 +6349,11 @@ class IPCHandlers {
       });
     };
 
+    ipcMain.handle("list-windows-output-devices", async () => {
+      if (process.platform !== "win32") return [];
+      return this.windowsLoopbackAudioManager?.listOutputDevices() ?? [];
+    });
+
     ipcMain.handle("check-system-audio-access", () => getSystemAudioAccess());
 
     ipcMain.handle("permission-guide-verify-system-audio", async () => {
@@ -7273,6 +7278,7 @@ class IPCHandlers {
       }
     });
 
+    let selectedMeetingOutputDeviceId = "";
     let meetingTranscriptionStartInProgress = false;
     let meetingTranscriptionPrepareInProgress = false;
     let meetingTranscriptionPreparePromise = null;
@@ -9293,6 +9299,8 @@ class IPCHandlers {
       // sessionId it registered; re-deriving one here would silently break
       // scoped stop/auto-end matching.
       const recordingSessionId = options.sessionId;
+      selectedMeetingOutputDeviceId = typeof options.selectedOutputDeviceId === "string"
+        ? options.selectedOutputDeviceId : "";
       meetingStartedAt = Date.now();
       // Stop captures and clears the segments, but a stop that fails partway
       // (the audio tap won't stop) never gets there.
@@ -9331,6 +9339,10 @@ class IPCHandlers {
 
       try {
         const systemAudioPlan = await getMeetingSystemAudioPlan({ refreshWindowsCapability: true });
+        if (selectedMeetingOutputDeviceId && process.platform === "win32" &&
+            systemAudioPlan.strategy !== "wasapi-loopback") {
+          throw new Error("Selected output capture requires the Windows native audio helper.");
+        }
         let { mode: systemAudioMode, strategy: systemAudioStrategy } = systemAudioPlan;
         setMeetingSystemAudioStrategy(systemAudioStrategy);
         const requestedConnectionKey = getMeetingConnectionKey(options, credentialGeneration);
@@ -9559,7 +9571,7 @@ class IPCHandlers {
       void this.windowsLoopbackAudioManager?.stop().catch(() => {});
     };
 
-    const startManagedMeetingSystemAudio = (event, manager, warningLabel, onWarningCode) => {
+    const startManagedMeetingSystemAudio = (event, manager, warningLabel, onWarningCode, deviceId = null) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       const timeline =
         manager === this.audioTapManager ? require("./meetingAudioTimeline")() : null;
@@ -9568,6 +9580,7 @@ class IPCHandlers {
         if (captureStarted) timeline?.markRestart();
         captureStarted = true;
         return manager.start({
+          ...(deviceId ? { deviceId } : {}),
           onChunk: (chunk) => {
             if (!meetingSystemAudioHandover.acceptNativeChunk(chunk)) return;
             if (timeline) {
@@ -9659,13 +9672,15 @@ class IPCHandlers {
             this.windowsLoopbackAudioManager,
             "Windows system audio warning",
             (code) => {
-              if (code === "capture_silent") {
+              if (code === "capture_silent" && !selectedMeetingOutputDeviceId) {
                 degradeMeetingSystemAudioToLoopback(event);
               }
-            }
+            },
+            selectedMeetingOutputDeviceId || null
           );
           return { systemAudioMode, systemAudioStrategy };
         } catch (error) {
+          if (selectedMeetingOutputDeviceId) throw error;
           debugLogger.warn(
             `Windows system audio helper failed ${context}, falling back to renderer loopback`,
             { error: error.message },

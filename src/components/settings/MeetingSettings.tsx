@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Cloud, Key, Cpu, Network } from "../icons";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -43,6 +43,59 @@ function MeetingEchoCancellationRow() {
       description={t("settingsPage.transcription.aec.toggle.description")}
     >
       <Toggle checked={meetingAecEnabled} onChange={setMeetingAecEnabled} />
+    </SettingsRow>
+  );
+}
+
+
+function MeetingOutputDeviceRow() {
+  const [devices, setDevices] = useState<Array<{id: string; name: string; isDefault: boolean}>>([]);
+  const [selected, setSelected] = useState(
+    () => localStorage.getItem("meetingOutputDeviceId") || ""
+  );
+  const [error, setError] = useState("");
+  const refresh = useCallback(async () => {
+    try {
+      const found = await window.electronAPI?.listWindowsOutputDevices?.();
+      setDevices(found || []);
+      setError("");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    if (navigator.platform.startsWith("Win")) void refresh();
+  }, [refresh]);
+  if (!navigator.platform.startsWith("Win")) return null;
+  const setOutput = (value: string) => {
+    localStorage.setItem("meetingOutputDeviceId", value);
+    setSelected(value);
+  };
+  return (
+    <SettingsRow
+      label="Meeting audio output"
+      description="Select the Windows speakers or headphones playing Teams audio. Automatic preserves original behavior. Changes take effect on the next recording."
+    >
+      <div className="flex flex-col gap-2 min-w-52">
+        <select
+          className="rounded-md border border-input bg-background px-2 py-2 text-sm"
+          value={selected}
+          onChange={(event) => setOutput(event.target.value)}
+          aria-label="Meeting output device"
+        >
+          <option value="">Automatic (original behavior)</option>
+          {devices.map((device) => (
+            <option key={device.id} value={device.id}>
+              {device.name}{device.isDefault ? " (Windows default)" : ""}
+            </option>
+          ))}
+          {selected && !devices.some((device) => device.id === selected) && (
+            <option value={selected}>Previously selected device (unavailable)</option>
+          )}
+        </select>
+        <Button variant="outline" size="sm" onClick={() => void refresh()}>Refresh devices</Button>
+        {error && <p className="text-xs text-destructive">{error}</p>}
+      </div>
     </SettingsRow>
   );
 }
@@ -202,6 +255,7 @@ export function MeetingTranscriptionPanel() {
       )}
       {effectiveTranscriptionMode === "providers" && renderTranscriptionPicker("cloud")}
       {effectiveTranscriptionMode === "local" && renderTranscriptionPicker("local")}
+      <MeetingOutputDeviceRow />
       <MeetingSpeakerDetectionRow />
       <MeetingEchoCancellationRow />
     </div>

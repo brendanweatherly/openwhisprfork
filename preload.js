@@ -765,6 +765,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   checkMicrophoneAccess: () => ipcRenderer.invoke("check-microphone-access"),
   getSystemDefaultMicrophone: (options) =>
     ipcRenderer.invoke("get-system-default-microphone", options),
+  listWindowsOutputDevices: () => ipcRenderer.invoke("list-windows-output-devices"),
   checkSystemAudioAccess: () => ipcRenderer.invoke("check-system-audio-access"),
   verifySystemAudioAccess: () => ipcRenderer.invoke("permission-guide-verify-system-audio"),
   requestSystemAudioAccess: () => ipcRenderer.invoke("request-system-audio-access"),
