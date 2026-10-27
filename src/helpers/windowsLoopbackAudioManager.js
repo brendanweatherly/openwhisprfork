@@ -116,7 +116,13 @@ class WindowsLoopbackAudioManager {
     return /activation_timeout/i.test(capability.error || "");
   }
 
-  async start({ onChunk, onError, onWarning } = {}) {
+  async listOutputDevices() {
+    if (!this.isSupported() || !this.resolveBinary()) return [];
+    const result = await this._runJsonCommand(["list-devices"], PROBE_TIMEOUT_MS);
+    return Array.isArray(result?.devices) ? result.devices : [];
+  }
+
+  async start({ onChunk, onError, onWarning, deviceId = null } = {}) {
     const capability = await this.getCapability();
     if (!capability.available) {
       throw new Error(capability.error || "Windows system audio helper is unavailable.");
@@ -137,6 +143,8 @@ class WindowsLoopbackAudioManager {
       "--sample-rate",
       String(SAMPLE_RATE),
     ];
+
+    if (deviceId) args.push("--device-id", deviceId);
 
     // stdin stays piped so the helper can detect parent death via EOF.
     const child = spawn(binaryPath, args, {
