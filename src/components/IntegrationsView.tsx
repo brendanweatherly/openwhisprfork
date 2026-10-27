@@ -177,7 +177,11 @@ export default function IntegrationsView({
 
   // Paid connector/API/MCP/CLI controls are hidden; free calendar integration stays available.
   if (LOCAL_ONLY_UI) {
-    return <div className="h-full overflow-y-auto px-6 py-6"><CalendarsPane title={titleOf("calendars")} /></div>;
+    return (
+      <div className="h-full overflow-y-auto px-6 py-6">
+        <CalendarsPane title={titleOf("calendars")} />
+      </div>
+    );
   }
 
   return (
