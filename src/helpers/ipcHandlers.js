@@ -7278,6 +7278,7 @@ class IPCHandlers {
       }
     });
 
+    let selectedMeetingOutputDeviceId = "";
     let meetingTranscriptionStartInProgress = false;
     let meetingTranscriptionPrepareInProgress = false;
     let meetingTranscriptionPreparePromise = null;
@@ -9298,7 +9299,7 @@ class IPCHandlers {
       // sessionId it registered; re-deriving one here would silently break
       // scoped stop/auto-end matching.
       const recordingSessionId = options.sessionId;
-      const selectedOutputDeviceId = typeof options.selectedOutputDeviceId === "string"
+      selectedMeetingOutputDeviceId = typeof options.selectedOutputDeviceId === "string"
         ? options.selectedOutputDeviceId : "";
       meetingStartedAt = Date.now();
       // Stop captures and clears the segments, but a stop that fails partway
@@ -9338,7 +9339,7 @@ class IPCHandlers {
 
       try {
         const systemAudioPlan = await getMeetingSystemAudioPlan({ refreshWindowsCapability: true });
-        if (selectedOutputDeviceId && process.platform === "win32" &&
+        if (selectedMeetingOutputDeviceId && process.platform === "win32" &&
             systemAudioPlan.strategy !== "wasapi-loopback") {
           throw new Error("Selected output capture requires the Windows native audio helper.");
         }
@@ -9671,15 +9672,15 @@ class IPCHandlers {
             this.windowsLoopbackAudioManager,
             "Windows system audio warning",
             (code) => {
-              if (code === "capture_silent" && !selectedOutputDeviceId) {
+              if (code === "capture_silent" && !selectedMeetingOutputDeviceId) {
                 degradeMeetingSystemAudioToLoopback(event);
               }
             },
-            selectedOutputDeviceId || null
+            selectedMeetingOutputDeviceId || null
           );
           return { systemAudioMode, systemAudioStrategy };
         } catch (error) {
-          if (selectedOutputDeviceId) throw error;
+          if (selectedMeetingOutputDeviceId) throw error;
           debugLogger.warn(
             `Windows system audio helper failed ${context}, falling back to renderer loopback`,
             { error: error.message },
