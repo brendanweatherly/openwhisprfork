@@ -3288,6 +3288,7 @@ declare global {
         noteId?: number | null;
         sessionId: string;
         autoEndEligible: boolean;
+        selectedOutputDeviceId?: string;
         aecEnabled?: boolean;
         speakerIndexBase?: number;
       }) => Promise<
