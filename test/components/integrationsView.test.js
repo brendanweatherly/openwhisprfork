@@ -8,6 +8,7 @@ const { createRendererServer, installBrowserGlobals } = require("../lib/renderer
 const { findElement, installInteractiveDom } = require("../lib/interactiveDom");
 
 const MOCKS = {
+  "/config/localOnlyUi": `export const LOCAL_ONLY_UI = false;`,
   "react-i18next": `
     const t = (key) => key;
     export const useTranslation = () => ({ t, i18n: { language: "en" } });
