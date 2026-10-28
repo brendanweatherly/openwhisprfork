@@ -42,6 +42,7 @@ async function mountNudge(t, { settings = {}, prompted = true } = {}) {
     cachePrefix: "openwhispr-cloud-nudge-",
     noExternal: ["react-i18next"],
     mockModules: {
+      "/config/localOnlyUi": "export const LOCAL_ONLY_UI = false;",
       "react-i18next": `
         const t = (key) => key;
         export function useTranslation() { return { t }; }
