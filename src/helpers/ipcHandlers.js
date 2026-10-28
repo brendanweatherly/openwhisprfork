@@ -13392,6 +13392,13 @@ class IPCHandlers {
           }
         }
 
+        debugLogger.info("Post-meeting diarization result delivered", {
+          noteId,
+          audioClusters: new Set(diarizationSegments.map((seg) => seg.speaker)).size,
+          diarizationTurns: diarizationSegments.length,
+          transcriptSegments: enrichedSegments.length,
+          namedSegments: enrichedSegments.filter((seg) => !!seg.speakerName).length,
+        });
         send({ segments: enrichedSegments, speakerEmbeddings: speakerEmbeddingsMap });
       } catch (err) {
         debugLogger.warn("Background diarization failed", { error: err.message });
