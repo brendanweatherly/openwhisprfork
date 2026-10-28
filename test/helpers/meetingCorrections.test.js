@@ -35,7 +35,7 @@ test("replaces whole words only, case-insensitively and across repeated whitespa
 
 test("respects punctuation and Unicode word boundaries", () => {
   const compiled = compileMeetingCorrections("nuvana => Nuvana");
-  assert.equal(applyMeetingCorrections("(nuvana), nuvana2, cafénuvana"), "(Nuvana), nuvana2, cafénuvana");
+  assert.equal(applyMeetingCorrections("(nuvana), nuvana2, cafénuvana", compiled), "(Nuvana), nuvana2, cafénuvana");
 });
 
 test("longest-match wins; inserted corrections cannot cascade", () => {
