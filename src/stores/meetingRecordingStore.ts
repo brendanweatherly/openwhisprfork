@@ -54,6 +54,7 @@ import {
   teardownFailedMeetingRecordingSetup,
 } from "../helpers/meetingRecordingSession";
 import { persistFinalTranscriptAroundStop } from "../helpers/meetingTranscriptPersistence";
+import { normalizeLiveSpeakerWindow } from "../helpers/speakerIdentificationTimeline.cjs";
 
 export interface TranscriptSegment {
   id: string;
@@ -1201,18 +1202,26 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
 
       const speakerCleanup = window.electronAPI?.onMeetingSpeakerIdentified?.((data) => {
         if (activeRecordingSessionId !== sessionId) return;
-        reserveSpeakerIndex(data.speakerId);
-        setSystemPartialSpeakerIdentity(data.speakerId, data.displayName ?? null);
-        rememberSystemSpeaker(data.speakerId, data.displayName ?? null, false, data.endTime);
+        // Live voice windows are measured in seconds since capture began.
+        // Transcription finals use epoch milliseconds; compare one clock only.
+        const identification: SpeakerIdentification = normalizeLiveSpeakerWindow(
+          data,
+          useMeetingRecordingStore.getState().recordingStartedAt
+        );
+        reserveSpeakerIndex(identification.speakerId);
+        setSystemPartialSpeakerIdentity(identification.speakerId, identification.displayName ?? null);
+        rememberSystemSpeaker(
+          identification.speakerId, identification.displayName ?? null, false, identification.endTime
+        );
         speakerIdentifications = [
           ...speakerIdentifications.filter(
-            (id) => id.endTime >= data.endTime - SPEAKER_IDENTIFICATION_RETENTION_MS
+            (id) => id.endTime >= identification.endTime - SPEAKER_IDENTIFICATION_RETENTION_MS
           ),
-          data,
+          identification,
         ];
         const next = useMeetingRecordingStore
           .getState()
-          .segments.map((segment) => applySpeakerIdentification(segment, data));
+          .segments.map((segment) => applySpeakerIdentification(segment, identification));
         segmentsRefValue = next;
         useMeetingRecordingStore.setState({ segments: next });
       });
