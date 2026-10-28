@@ -14,6 +14,7 @@ async function loadProfileMenu(t) {
   const vite = await createRendererServer(t, {
     cachePrefix: "openwhispr-profile-menu-",
     mockModules: {
+      "/config/localOnlyUi": "export const LOCAL_ONLY_UI = false;",
       "/hooks/useAuth": "export const useAuth = () => globalThis.__auth;",
       "/hooks/useUsage": "export const useUsage = () => null;",
       "/hooks/useAccountPlan":
