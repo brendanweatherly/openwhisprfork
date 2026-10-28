@@ -331,3 +331,31 @@ test("untimed upload text exports without invented times or speakers", () => {
   assert.deepEqual(json.speakers, []);
   assert.equal(json.segments[0].speaker, null);
 });
+
+test("mixed epoch-ms and relative-seconds meeting times export within recording duration", () => {
+  const now = 1793211000000;
+  const note = { title: "Recording", created_at: "2026-10-28T18:00:00Z" };
+  const segments = [
+    { speaker: "speaker_0", timestamp: 4, text: "Opening." },
+    { speaker: "speaker_1", timestamp: now + 5000, text: "Reply." },
+    { speaker: "speaker_0", timestamp: now + 12000, text: "End." },
+  ];
+  const output = formatTxt(note, segments, {});
+  assert.match(output, /\[00:00:04\] Speaker 1:/);
+  assert.match(output, /\[00:00:00\] Speaker 2:/);
+  assert.match(output, /\[00:00:07\] Speaker 1:/);
+  assert.doesNotMatch(output, /498[0-9]{6}:/);
+});
+
+test("epoch-only exports retain elapsed time while relative-only exports remain unchanged", () => {
+  const start = 1793211000000;
+  const note = { title: "Recording", created_at: "2026-10-28T18:00:00Z" };
+  assert.match(formatTxt(note, [
+    { speaker: "speaker_0", timestamp: start, text: "Start." },
+    { speaker: "speaker_1", timestamp: start + 8000, text: "Reply." },
+  ], {}), /\[00:00:08\] Speaker 2:/);
+  assert.match(formatTxt(note, [
+    { speaker: "speaker_0", timestamp: 3, text: "Start." },
+    { speaker: "speaker_1", timestamp: 11, text: "Reply." },
+  ], {}), /\[00:00:11\] Speaker 2:/);
+});
