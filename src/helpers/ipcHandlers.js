@@ -8580,7 +8580,8 @@ class IPCHandlers {
           // Orukeet has no prompt/hotword injection in this offline path.
           // Correct only explicitly configured, literal phrases after decoding.
           // The audio stream, echo detection and diarization remain unchanged.
-          const text = isSherpaLocalProvider(meetingLocalProvider)
+          const text = isSherpaLocalProvider(meetingLocalProvider) &&
+            /^orukeet(?:-|$)/i.test(String(meetingLocalModel || ""))
             ? applyMeetingCorrections(rawText, meetingCorrectionMatcher)
             : rawText;
           const segTimestamp = Date.now();
