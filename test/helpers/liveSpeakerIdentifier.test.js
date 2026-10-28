@@ -70,8 +70,7 @@ const unit = (values) => {
 
 const voiceA = unit([1, 0, 0]);
 const voiceB = unit([0, 1, 0]);
-// ~0.7 similar to both A and B: fails the match margin, so it mints a cluster
-// that the next recluster pass merges back into A.
+// ~0.7 similar to both A and B, too uncertain to merge automatically.
 const ambiguousVoice = unit([0.7, 0.7, 0.14]);
 const voiceC = unit([0.05, 0.05, 0.99]);
 
@@ -79,7 +78,9 @@ function seedMergedSession(identifier) {
   identifier.setMaxSpeakers(3);
   identifier._resolveSpeakerForEmbedding(voiceA, { updateCentroid: true });
   identifier._resolveSpeakerForEmbedding(voiceB, { updateCentroid: true });
-  identifier._resolveSpeakerForEmbedding(ambiguousVoice, { updateCentroid: true });
+  // Plant a duplicate embedding directly; this is a deliberate regression
+  // fixture, not a third voice inferred from an uncertain chunk.
+  identifier._assignSpeakerId(unit([0.995, 0.10, 0]));
   const merges = identifier._performRecluster();
   assert.equal(merges.length, 1, "expected the ambiguous cluster to merge away");
   return merges[0];
@@ -162,8 +163,8 @@ test("mapSpeaker stays quiet when no session is running", () => {
   assert.deepEqual(warnings, []);
 });
 
-// Plants exactly two clusters ~0.70 similar (above the 0.65 recluster
-// threshold) — creating them via resolution would just match them together.
+// Plants two different speaker clusters; their moderate similarity must not
+// be sufficient for a destructive merge.
 function seedSimilarIdentifiedPair(identifier) {
   identifier.setMaxSpeakers(3);
   identifier._assignSpeakerId(voiceA);
@@ -195,16 +196,24 @@ test("clusters with different manual names never merge on similarity alone", () 
   assert.deepEqual(merges, [], "differing user-set names assert distinct identities");
 });
 
-test("an unidentified cluster still merges into an identified one", () => {
+test("a named voice does not absorb a distinct unidentified cluster", () => {
   const { LiveSpeakerIdentifier } = loadIdentifier();
   const identifier = new LiveSpeakerIdentifier();
 
-  seedSimilarIdentifiedPair(identifier);
+  identifier._assignSpeakerId(voiceA);
+  identifier._assignSpeakerId(unit([0.995, 0.10, 0]));
   assert.equal(identifier.mapSpeaker("speaker_0", 1, "Alice", null), true);
 
-  const merges = identifier._performRecluster();
-  assert.equal(merges.length, 1, "the guard must not block ordinary convergence");
-  assert.equal(merges[0].displayName, "Alice");
+  assert.deepEqual(identifier._performRecluster(), []);
+  assert.ok(identifier.getSpeakerEmbedding("speaker_1"));
+});
+
+test("two extremely similar unnamed clusters can still converge", () => {
+  const { LiveSpeakerIdentifier } = loadIdentifier();
+  const identifier = new LiveSpeakerIdentifier();
+  identifier._assignSpeakerId(voiceA);
+  identifier._assignSpeakerId(unit([0.995, 0.10, 0]));
+  assert.equal(identifier._performRecluster().length, 1);
 });
 
 test("a voice force-merged at the cap becomes its own speaker once the cap rises", () => {
@@ -214,7 +223,7 @@ test("a voice force-merged at the cap becomes its own speaker once the cap rises
 
   const first = identifier._resolveSpeakerForEmbedding(voiceA, { updateCentroid: true });
   const folded = identifier._resolveSpeakerForEmbedding(voiceB, { updateCentroid: true });
-  assert.equal(folded.speakerId, first.speakerId, "at the cap the voice is folded");
+  assert.equal(folded.speakerId, null, "unrelated overflow voice stays unidentified");
 
   // Participants added mid-meeting raise the cap; the folded voice must not
   // stay captured by a centroid polluted during the at-cap period.
@@ -239,12 +248,11 @@ test("an at-cap fold never steals the cluster's identity for a profile-matched v
   const alice = identifier._resolveSpeakerForEmbedding(voiceA, { updateCentroid: true });
   assert.equal(alice.displayName, "Alice");
 
-  // Bob overflows the cap: his utterance is folded into Alice's cluster, but
-  // the cluster must keep Alice's identity — retagging it as Bob would both
-  // mislabel Alice and re-capture Bob through the profile lookup later.
+  // Bob overflows the cap: do not falsely call him Alice while the model
+  // cannot accommodate an additional voice.
   const bobAtCap = identifier._resolveSpeakerForEmbedding(voiceB, { updateCentroid: true });
-  assert.equal(bobAtCap.speakerId, alice.speakerId);
-  assert.equal(bobAtCap.displayName, "Alice");
+  assert.equal(bobAtCap.speakerId, null);
+  assert.equal(bobAtCap.displayName, null);
 
   identifier.setMaxSpeakers(3);
   const bobAfter = identifier._resolveSpeakerForEmbedding(voiceB, { updateCentroid: true });
@@ -428,7 +436,7 @@ test("identification embeds the exact tail of the concatenated speech chunks", a
   );
 });
 
-test("distinct voices are folded into one cluster when the session cap is 1", () => {
+test("distinct voices are not falsely labeled at the speaker cap", () => {
   const { LiveSpeakerIdentifier } = loadIdentifier();
   const identifier = new LiveSpeakerIdentifier();
   identifier.setMaxSpeakers(1);
@@ -437,11 +445,8 @@ test("distinct voices are folded into one cluster when the session cap is 1", ()
   const second = identifier._resolveSpeakerForEmbedding(voiceB, { updateCentroid: true });
 
   assert.equal(cosineSimilarity(voiceA, voiceB), 0);
-  assert.equal(
-    second.speakerId,
-    first.speakerId,
-    "at the cap, new voices are force-merged into the nearest cluster by design"
-  );
+  assert.equal(second.speakerId, null, "no confident match means no speaker label");
+  assert.ok(first.speakerId, "the original voice retains its own cluster");
 });
 
 // Every 16 kHz sample the identifier produced, in order: the VAD windows it
