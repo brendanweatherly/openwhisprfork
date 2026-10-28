@@ -3289,6 +3289,7 @@ declare global {
         sessionId: string;
         autoEndEligible: boolean;
         selectedOutputDeviceId?: string;
+        localMeetingCorrectionRules?: string;
         aecEnabled?: boolean;
         speakerIndexBase?: number;
       }) => Promise<
