@@ -23,7 +23,7 @@ const GUEST_ON_OWN_SETUP = {
   cloudTranscriptionProvider: "groq",
 };
 
-async function mountNudge(t, { settings = {}, prompted = true } = {}) {
+async function mountNudge(t, { settings = {}, prompted = true, localOnly = false } = {}) {
   let unmount = async () => {};
   t.after(() => unmount());
   const { storage } = installBrowserGlobals(t, {
@@ -42,6 +42,7 @@ async function mountNudge(t, { settings = {}, prompted = true } = {}) {
     cachePrefix: "openwhispr-cloud-nudge-",
     noExternal: ["react-i18next"],
     mockModules: {
+      "/config/localOnlyUi": `export const LOCAL_ONLY_UI = ${localOnly};`,
       "react-i18next": `
         const t = (key) => key;
         export function useTranslation() { return { t }; }
@@ -94,6 +95,14 @@ async function mountNudge(t, { settings = {}, prompted = true } = {}) {
       React.act(async () => usePolicyStore.setState({ status, policy, appVersion: "1.10.0" })),
   };
 }
+
+test("local-only fork never advertises paid Cloud after sign-in", async (t) => {
+  const nudge = await mountNudge(t, { localOnly: true });
+  await nudge.signIn();
+  await nudge.settlePolicy();
+  assert.deepEqual(nudge.toasts, []);
+  assert.equal(nudge.settingsOpened(), 0);
+});
 
 test("a sign-in nudges towards Cloud once the account's policy settles", async (t) => {
   const nudge = await mountNudge(t);

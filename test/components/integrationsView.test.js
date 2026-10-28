@@ -8,6 +8,7 @@ const { createRendererServer, installBrowserGlobals } = require("../lib/renderer
 const { findElement, installInteractiveDom } = require("../lib/interactiveDom");
 
 const MOCKS = {
+  "/config/localOnlyUi": `export const LOCAL_ONLY_UI = false;`,
   "react-i18next": `
     const t = (key) => key;
     export const useTranslation = () => ({ t, i18n: { language: "en" } });
@@ -119,6 +120,7 @@ async function renderView(
     statuses = {},
     gcalAccounts = [],
     connectorAccess = { isPaid, blockedByOrg: false, connectorsAllowed: true },
+    localOnly = false,
   } = {}
 ) {
   let root = null;
@@ -150,7 +152,10 @@ async function renderView(
   const vite = await createRendererServer(t, {
     cachePrefix: "openwhispr-integrations-view-test-",
     noExternal: ["react-i18next"],
-    mockModules: MOCKS,
+    mockModules: {
+      ...MOCKS,
+      "/config/localOnlyUi": `export const LOCAL_ONLY_UI = ${localOnly};`,
+    },
   });
   const { default: IntegrationsView } = await vite.ssrLoadModule(
     "/components/IntegrationsView.tsx"
@@ -169,6 +174,13 @@ async function renderView(
   await React.act(async () => root.render(createElement(Harness)));
   return { container, upgrades, openedUrls };
 }
+
+test("local-only fork displays calendars and hides paid integrations navigation", async (t) => {
+  const { container } = await renderView(t, { localOnly: true, section: "connectors" });
+  assert.match(shownText(container), /CALENDARS PANE/);
+  assert.doesNotMatch(shownText(container), /CONNECTORS SECTION|API KEYS SECTION/);
+  assert.equal(nav(container), null);
+});
 
 test("sectionMeta shows counts on a paid plan and plan badges on a free one", async (t) => {
   const vite = await createRendererServer(t, {

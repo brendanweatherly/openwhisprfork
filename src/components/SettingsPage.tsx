@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { LOCAL_ONLY_UI, isHiddenLocalOnlySettingsSection } from "../config/localOnlyUi";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { BIDI_VALUE_TOKEN, BidiInterpolatedText } from "./ui/BidiInterpolatedText";
@@ -1416,7 +1417,7 @@ export default function SettingsPage({
     useAccountPlan(usage);
   const hasShownApproachingToast = useRef(false);
   useEffect(() => {
-    if (usage?.isApproachingLimit && !hasShownApproachingToast.current) {
+    if (!LOCAL_ONLY_UI && usage?.isApproachingLimit && !hasShownApproachingToast.current) {
       hasShownApproachingToast.current = true;
       toast({
         title: t("settingsPage.account.toasts.approachingLimit.title"),
@@ -2132,6 +2133,7 @@ export default function SettingsPage({
   );
 
   const renderSectionContent = () => {
+    if (isHiddenLocalOnlySettingsSection(activeSection)) return null;
     switch (activeSection) {
       case "account":
         return (

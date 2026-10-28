@@ -4,7 +4,7 @@ const { createElement } = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { createRendererServer, installBrowserGlobals } = require("../lib/rendererTestHarness");
 
-async function loadProfileMenu(t) {
+async function loadProfileMenu(t, { localOnly = false } = {}) {
   t.after(() => {
     delete globalThis.__auth;
     delete globalThis.__menuItems;
@@ -14,6 +14,7 @@ async function loadProfileMenu(t) {
   const vite = await createRendererServer(t, {
     cachePrefix: "openwhispr-profile-menu-",
     mockModules: {
+      "/config/localOnlyUi": `export const LOCAL_ONLY_UI = ${localOnly};`,
       "/hooks/useAuth": "export const useAuth = () => globalThis.__auth;",
       "/hooks/useUsage": "export const useUsage = () => null;",
       "/hooks/useAccountPlan":
@@ -51,6 +52,17 @@ async function loadProfileMenu(t) {
   };
   return { render, opened };
 }
+
+test("local-only fork hides account, sign-in, billing and referral menu", async (t) => {
+  const { render } = await loadProfileMenu(t, { localOnly: true });
+  assert.equal(render({ isLoaded: true, isSignedIn: false, user: null }), "");
+  assert.equal(render({
+    isLoaded: true,
+    isSignedIn: true,
+    user: { name: "Local User", email: "local@example.com", image: null },
+  }), "");
+  assert.equal(globalThis.__menuItems.size, 0);
+});
 
 test("a session still loading shows neither Sign in nor an account", async (t) => {
   const { render } = await loadProfileMenu(t);

@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../hooks/useAuth";
 import { useUsage } from "../hooks/useUsage";
 import { useAccountPlan } from "../hooks/useAccountPlan";
+import { LOCAL_ONLY_UI } from "../config/localOnlyUi";
 
 const triggerClass =
   "flex h-8 w-8 shrink-0 items-center justify-center rounded-full outline-none transition-opacity duration-150 hover:opacity-85 active:opacity-75 focus-visible:ring-2 focus-visible:ring-primary/40";
@@ -29,11 +30,14 @@ export default function ProfileMenu({
   onOpenSettings,
   onOpenReferrals,
   onSignOut,
-}: ProfileMenuProps): React.ReactElement {
+}: ProfileMenuProps): React.ReactElement | null {
   const { t } = useTranslation();
   const { isSignedIn, isLoaded, user } = useAuth();
   const usage = useUsage();
   const { planLabel } = useAccountPlan(usage);
+
+  // Local-only builds do not show account, billing or referral entry points.
+  if (LOCAL_ONLY_UI) return null;
 
   // Until the session settles a signed-in user reads as signed out; hold the slot instead of
   // flashing Sign in.

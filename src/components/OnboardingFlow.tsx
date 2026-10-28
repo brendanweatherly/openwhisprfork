@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LOCAL_ONLY_UI } from "../config/localOnlyUi";
 import { AlertCircle } from "./icons";
 import { CompactAuthenticationFlow } from "./CompactAuthenticationFlow";
 import UseCaseStep from "./onboarding/UseCaseStep";
@@ -905,6 +906,27 @@ export default function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const renderStep = () => {
     switch (currentStepId) {
       case "auth":
+        if (LOCAL_ONLY_UI) {
+          return (
+            <div className="min-h-full w-full flex flex-col items-center justify-center gap-4 px-6 text-center">
+              <h2 className="text-xl font-semibold">Set up local recording</h2>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Use local transcription and AI models without an OpenWhispr subscription or account.
+              </p>
+              <button
+                type="button"
+                className="rounded-lg bg-primary px-5 py-3 text-sm font-medium text-primary-foreground"
+                onClick={() => {
+                  setReturnedToAuth(false);
+                  setAuthPath("guest");
+                  goTo("permissions");
+                }}
+              >
+                Continue locally
+              </button>
+            </div>
+          );
+        }
         return (
           <div className="min-h-full w-full">
             <CompactAuthenticationFlow

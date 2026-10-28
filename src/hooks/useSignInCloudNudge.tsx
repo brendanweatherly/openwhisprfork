@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { LOCAL_ONLY_UI } from "../config/localOnlyUi";
 import { useTranslation } from "react-i18next";
 import { ToastActionButton } from "../components/ui/Toast";
 import { useToast } from "../components/ui/useToast";
@@ -26,6 +27,7 @@ export function useSignInCloudNudge(
   );
 
   useEffect(() => {
+    if (LOCAL_ONLY_UI) return;
     const promptedAt = localStorage.getItem(SIGN_IN_PROMPTED_AT_KEY);
     if (promptedAt === null) return;
     const decision = decideSignInCloudNudge({

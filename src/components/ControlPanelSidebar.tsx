@@ -7,6 +7,7 @@ import SupportDropdown from "./ui/SupportDropdown";
 import { Button } from "./ui/button";
 import WorkspaceSwitcher from "./WorkspaceSwitcher";
 import type { UpsellDecision } from "../lib/upsell";
+import { LOCAL_ONLY_UI } from "../config/localOnlyUi";
 import { useControlPanelNavItems, type ControlPanelView } from "./controlPanelNav";
 
 export type { ControlPanelView };
@@ -46,8 +47,8 @@ export default function ControlPanelSidebar({
     () => localStorage.getItem("upgradeProDismissed") === "true"
   );
 
-  const showLimitBanner = upsell === "show" && Boolean(isSignedIn) && Boolean(isOverLimit);
-  const showUpgradeBanner = upsell === "show" && !showLimitBanner && !upgradeDismissed;
+  const showLimitBanner = !LOCAL_ONLY_UI && upsell === "show" && Boolean(isSignedIn) && Boolean(isOverLimit);
+  const showUpgradeBanner = !LOCAL_ONLY_UI && upsell === "show" && !showLimitBanner && !upgradeDismissed;
 
   const navItems = useControlPanelNavItems();
 
@@ -168,7 +169,7 @@ export default function ControlPanelSidebar({
           </div>
         )}
 
-        {isSignedIn && onOpenReferrals && (
+        {!LOCAL_ONLY_UI && isSignedIn && onOpenReferrals && (
           <button
             onClick={onOpenReferrals}
             aria-label={t("sidebar.referral")}
@@ -198,7 +199,7 @@ export default function ControlPanelSidebar({
         />
 
         <div className="pt-1">
-          <WorkspaceSwitcher />
+          {!LOCAL_ONLY_UI && <WorkspaceSwitcher />}
         </div>
       </div>
     </div>
