@@ -66,9 +66,23 @@ function normalizeSegmentTimestamps(segments, note) {
   const startMs = resolveRecordingStartMs(segments, note);
   if (startMs == null) return segments;
 
+  // If an early provisional row was already converted to elapsed seconds,
+  // keep later epoch rows after it instead of producing a backwards-running SRT.
+  const firstEpochIndex = segments.findIndex(
+    (seg) => typeof seg.timestamp === "number" && seg.timestamp > EPOCH_MS_MIN
+  );
+  const precedingElapsed = segments
+    .slice(0, firstEpochIndex)
+    .map((seg) => seg.timestamp)
+    .filter((time) => typeof time === "number" && Number.isFinite(time) &&
+      time >= 0 && time <= EPOCH_MS_MIN);
+  const epochOffsetSeconds = precedingElapsed.length
+    ? Math.max(...precedingElapsed) + 0.001
+    : 0;
+
   const normalizeTime = (time) =>
     typeof time === "number" && Number.isFinite(time) && time > EPOCH_MS_MIN
-      ? (time - startMs) / 1000
+      ? (time - startMs) / 1000 + epochOffsetSeconds
       : time;
 
   return segments.map((seg) => ({
