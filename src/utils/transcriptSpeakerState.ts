@@ -104,7 +104,21 @@ const mergeSpeakerFields = (existing: TranscriptSegment, incoming: TranscriptSeg
   const existingFields = existing as Record<SpeakerStateField, unknown>;
   const mergedFields = merged as Record<SpeakerStateField, unknown>;
 
+  // A completed diarization replaces automatic live guesses. Its lack of a
+  // speaker name is deliberate: never restore the old, possibly incorrect
+  // name/suggestion simply because the final cluster has no verified owner.
+  // A user's explicit lock is restored by the protected branch below.
+  const replacingUnverifiedName =
+    incoming.speakerStatus === "confirmed" &&
+    !!incoming.speaker &&
+    !incoming.speakerName &&
+    !isTranscriptSpeakerLocked(existing);
+  const staleIdentityFields = new Set<SpeakerStateField>([
+    "speakerName", "suggestedName", "suggestedProfileId",
+  ]);
+
   for (const field of SPEAKER_STATE_FIELDS) {
+    if (replacingUnverifiedName && staleIdentityFields.has(field)) continue;
     if (mergedFields[field] === undefined && existingFields[field] !== undefined) {
       mergedFields[field] = existingFields[field];
     }
