@@ -38,13 +38,18 @@ function parseNoteDate(createdAt) {
   return new Date(value.includes("T") ? `${value}Z` : `${value.replace(" ", "T")}Z`);
 }
 
-function resolveRecordingStartMs(segments, note) {
-  const segmentTimestamps = segments
-    .map((seg) => seg.timestamp)
-    .filter((ts) => typeof ts === "number" && Number.isFinite(ts));
+// Live meeting segments can mix elapsed seconds with Date.now() milliseconds
+// when provisional rows survive post-meeting diarization. Never let a single
+// elapsed timestamp (e.g. 4) make every epoch timestamp render as 498M hours.
+const EPOCH_MS_MIN = 100_000_000_000;
 
-  if (segmentTimestamps.length > 0) {
-    return Math.min(...segmentTimestamps);
+function resolveRecordingStartMs(segments, note) {
+  const epochTimestamps = segments
+    .map((seg) => seg.timestamp)
+    .filter((ts) => typeof ts === "number" && Number.isFinite(ts) && ts > EPOCH_MS_MIN);
+
+  if (epochTimestamps.length > 0) {
+    return Math.min(...epochTimestamps);
   }
 
   const noteDate = parseNoteDate(note?.created_at);
@@ -52,21 +57,25 @@ function resolveRecordingStartMs(segments, note) {
 }
 
 function normalizeSegmentTimestamps(segments, note) {
-  const startMs = resolveRecordingStartMs(segments, note);
-  if (startMs == null || startMs <= 1e9) {
-    return segments;
-  }
+  const hasEpochMs = segments.some(
+    (seg) => typeof seg.timestamp === "number" && Number.isFinite(seg.timestamp) &&
+      seg.timestamp > EPOCH_MS_MIN
+  );
+  if (!hasEpochMs) return segments;
 
-  return segments.map((seg) => {
-    const normalized = { ...seg };
-    if (typeof seg.timestamp === "number" && Number.isFinite(seg.timestamp)) {
-      normalized.timestamp = (seg.timestamp - startMs) / 1000;
-    }
-    if (typeof seg.endTimestamp === "number" && Number.isFinite(seg.endTimestamp)) {
-      normalized.endTimestamp = (seg.endTimestamp - startMs) / 1000;
-    }
-    return normalized;
-  });
+  const startMs = resolveRecordingStartMs(segments, note);
+  if (startMs == null) return segments;
+
+  const normalizeTime = (time) =>
+    typeof time === "number" && Number.isFinite(time) && time > EPOCH_MS_MIN
+      ? (time - startMs) / 1000
+      : time;
+
+  return segments.map((seg) => ({
+    ...seg,
+    timestamp: normalizeTime(seg.timestamp),
+    endTimestamp: normalizeTime(seg.endTimestamp),
+  }));
 }
 
 function mergeSegments(segments) {
