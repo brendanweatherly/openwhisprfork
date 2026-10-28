@@ -10,6 +10,7 @@ const debugLogger = require("./debugLogger");
 const { ANALYTICS_HISTORY_BACKFILL_VERSION } = require("./analytics");
 const { PARAKEET_UNSUPPORTED_OS_CODE } = require("./parakeetCapability");
 const { getModelType, isSherpaLocalProvider } = require("./parakeetModelInfo");
+const { compileMeetingCorrections, applyMeetingCorrections } = require("./meetingCorrections.cjs");
 const { broadcastToWindows } = require("./windowBroadcast");
 const { openExternalUrl } = require("./externalUrlOpener");
 const { resolveFailedGpuBackends } = require("./whisper");
@@ -7279,6 +7280,7 @@ class IPCHandlers {
     });
 
     let selectedMeetingOutputDeviceId = "";
+    let meetingCorrectionMatcher = null;
     let meetingTranscriptionStartInProgress = false;
     let meetingTranscriptionPrepareInProgress = false;
     let meetingTranscriptionPreparePromise = null;
@@ -8574,7 +8576,13 @@ class IPCHandlers {
         }
 
         if (result?.success && result.text?.trim()) {
-          const text = result.text.trim();
+          const rawText = result.text.trim();
+          // Orukeet has no prompt/hotword injection in this offline path.
+          // Correct only explicitly configured, literal phrases after decoding.
+          // The audio stream, echo detection and diarization remain unchanged.
+          const text = isSherpaLocalProvider(meetingLocalProvider)
+            ? applyMeetingCorrections(rawText, meetingCorrectionMatcher)
+            : rawText;
           const segTimestamp = Date.now();
           let micSuppression = null;
           if (source === "mic") {
@@ -9301,6 +9309,10 @@ class IPCHandlers {
       const recordingSessionId = options.sessionId;
       selectedMeetingOutputDeviceId = typeof options.selectedOutputDeviceId === "string"
         ? options.selectedOutputDeviceId : "";
+      meetingCorrectionMatcher = compileMeetingCorrections(options.localMeetingCorrectionRules);
+      if (meetingCorrectionMatcher) {
+        debugLogger.info("Local meeting corrections active", { count: meetingCorrectionMatcher.count }, "meeting");
+      }
       meetingStartedAt = Date.now();
       // Stop captures and clears the segments, but a stop that fails partway
       // (the audio tap won't stop) never gets there.
