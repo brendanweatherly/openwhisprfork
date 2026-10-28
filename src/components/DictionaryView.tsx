@@ -35,6 +35,25 @@ export default function DictionaryView() {
   const { toast } = useToast();
 
   const [newWord, setNewWord] = useState("");
+  // Meeting corrections are private, device-local preferences. Unlike Dictionary
+  // words, they never enter the cloud-sync dictionary or model prompts.
+  const [meetingCorrectionText, setMeetingCorrectionText] = useState(() => {
+    try {
+      return typeof window !== "undefined"
+        ? window.localStorage.getItem("localMeetingCorrectionRules") || ""
+        : "";
+    } catch {
+      return "";
+    }
+  });
+  const handleMeetingCorrectionText = useCallback((value: string) => {
+    setMeetingCorrectionText(value);
+    try {
+      window.localStorage.setItem("localMeetingCorrectionRules", value);
+    } catch {
+      // Keep this session editable when storage is temporarily unavailable.
+    }
+  }, []);
   const [showEmptyInput, setShowEmptyInput] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [showBulkImport, setShowBulkImport] = useState(false);
@@ -211,6 +230,10 @@ export default function DictionaryView() {
             <PanelRight size={17} />
             {t("dictionary.tabSnippets")}
           </TabsTrigger>
+          <TabsTrigger value="meetingCorrections" variant="pill">
+            <Pencil size={17} />
+            Meeting corrections
+          </TabsTrigger>
         </TabsList>
       </div>
 
@@ -381,6 +404,31 @@ export default function DictionaryView() {
 
       <TabsContent value="snippets" className="flex-1 min-h-0 mt-0 overflow-y-auto">
         <SnippetsView />
+      </TabsContent>
+
+      <TabsContent value="meetingCorrections" className="flex-1 min-h-0 mt-0 overflow-y-auto">
+        <div className={cn(PAGE_CONTENT_WIDTH_CLASS, "px-6 py-5 space-y-3")}>
+          <h3 className="text-lg font-medium">Local meeting corrections</h3>
+          <p className="text-sm text-foreground/65">
+            Enter one correction per line: misheard phrase =&gt; correct spelling.
+            Rules apply to new local Orukeet meeting transcripts, not to recordings
+            or existing notes. Use only distinctive phrases; avoid common words.
+          </p>
+          <Textarea
+            dir="auto"
+            rows={11}
+            maxLength={16000}
+            value={meetingCorrectionText}
+            onChange={(e) => handleMeetingCorrectionText(e.target.value)}
+            placeholder={"example phrase => Correct Term\nanother phrase => Another Term"}
+            className="w-full font-mono text-sm"
+            aria-label="Local meeting transcription corrections"
+          />
+          <p className="text-xs text-foreground/55">
+            Saved automatically on this computer only. The first 150 valid rules are
+            used at the start of each meeting. This does not retrain Orukeet.
+          </p>
+        </div>
       </TabsContent>
     </Tabs>
   );
