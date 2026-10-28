@@ -59,7 +59,7 @@ test("a silent Windows capture hands the live session to renderer loopback", () 
   // capture_silent warning is the only trigger back to the Chromium fallback.
   assert.match(
     source,
-    /if \(code === "capture_silent"\) \{\s*degradeMeetingSystemAudioToLoopback\(event\);/
+    /if \(code === "capture_silent" && !selectedMeetingOutputDeviceId\) \{\s*degradeMeetingSystemAudioToLoopback\(event\);/
   );
   assert.match(
     source,
