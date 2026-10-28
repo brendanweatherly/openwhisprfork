@@ -530,8 +530,14 @@ class DiarizationManager {
         const bestSpeaker = overlapSpeaker ?? nearestSpeaker;
 
         if (bestSpeaker) {
+          // A batch cluster is independent of the live cluster that happened to
+          // use the same numeric ID. Preserve user locks, but never carry a
+          // provisional/automatic live name (e.g. Dan) to a different voice.
           applyConfirmedSpeaker(enriched, {
             speaker: speakerMap.get(bestSpeaker) || bestSpeaker,
+            speakerName: undefined,
+            suggestedName: undefined,
+            suggestedProfileId: undefined,
             speakerIsPlaceholder: false,
           });
         }
