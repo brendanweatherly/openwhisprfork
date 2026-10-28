@@ -979,6 +979,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
         sessionId,
         autoEndEligible: args.autoEndEligible,
         selectedOutputDeviceId: localStorage.getItem("meetingOutputDeviceId") || "",
+        localMeetingCorrectionRules: localStorage.getItem("localMeetingCorrectionRules") || "",
         aecEnabled: getSettings().meetingAecEnabled,
         speakerIndexBase: sessionSpeakerIndexBase,
       });
