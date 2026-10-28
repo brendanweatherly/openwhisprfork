@@ -54,9 +54,9 @@ test("silent system audio warning arms on start and clears on every teardown pat
   assert.match(stopSection, /clearMeetingSystemAudioSilenceTimer\(\);/);
 });
 
-test("a silent Windows capture hands the live session to renderer loopback", () => {
-  // probe/activation success cannot see this failure, so the helper's own
-  // capture_silent warning is the only trigger back to the Chromium fallback.
+test("automatic silent Windows capture can fall back without overriding an explicit device", () => {
+  // An automatic process-loopback capture can fall back on silence.
+  // A selected headset must never silently switch to Chromium/default output.
   assert.match(
     source,
     /if \(code === "capture_silent" && !selectedMeetingOutputDeviceId\) \{\s*degradeMeetingSystemAudioToLoopback\(event\);/
