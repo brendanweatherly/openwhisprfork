@@ -223,3 +223,16 @@ test("post-session mic dedupe only looks at system text within 6 seconds", () =>
   assert.deepEqual(removed, [nearEcho]);
   assert.deepEqual(kept, [system, later]);
 });
+
+test("mixed epoch-ms and relative-seconds rows align with offline speaker windows", async () => {
+  const payload = await runMainDiarization([
+    { source: "system", text: "First utterance.", timestamp: START_MS + 2000 },
+    { source: "system", text: "Second utterance.", timestamp: 5 },
+  ]);
+  assert.deepEqual(
+    payload.segments.map((segment) => segment.timestamp),
+    [2, 5],
+    "relative seconds must not have an epoch-ms origin subtracted from them"
+  );
+  assert.ok(payload.segments.every((segment) => segment.speaker === "speaker_0"));
+});
