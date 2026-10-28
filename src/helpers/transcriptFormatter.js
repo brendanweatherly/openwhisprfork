@@ -38,32 +38,29 @@ function parseNoteDate(createdAt) {
   return new Date(value.includes("T") ? `${value}Z` : `${value.replace(" ", "T")}Z`);
 }
 
+// Live meeting segments use epoch milliseconds, but older/seeded notes can
+// contain recording-relative seconds. Never subtract one from the other.
+const EPOCH_MS_FLOOR = 1e11;
 function resolveRecordingStartMs(segments, note) {
-  const segmentTimestamps = segments
+  const epochTimestamps = segments
     .map((seg) => seg.timestamp)
-    .filter((ts) => typeof ts === "number" && Number.isFinite(ts));
-
-  if (segmentTimestamps.length > 0) {
-    return Math.min(...segmentTimestamps);
-  }
-
-  const noteDate = parseNoteDate(note?.created_at);
-  return Number.isNaN(noteDate.getTime()) ? null : noteDate.getTime();
+    .filter((ts) => typeof ts === "number" && Number.isFinite(ts) && ts >= EPOCH_MS_FLOOR);
+  if (epochTimestamps.length > 0) return Math.min(...epochTimestamps);
+  return null;
 }
 
 function normalizeSegmentTimestamps(segments, note) {
   const startMs = resolveRecordingStartMs(segments, note);
-  if (startMs == null || startMs <= 1e9) {
-    return segments;
-  }
-
   return segments.map((seg) => {
     const normalized = { ...seg };
-    if (typeof seg.timestamp === "number" && Number.isFinite(seg.timestamp)) {
-      normalized.timestamp = (seg.timestamp - startMs) / 1000;
-    }
-    if (typeof seg.endTimestamp === "number" && Number.isFinite(seg.endTimestamp)) {
-      normalized.endTimestamp = (seg.endTimestamp - startMs) / 1000;
+    for (const field of ["timestamp", "endTimestamp"]) {
+      const ts = seg[field];
+      if (typeof ts !== "number" || !Number.isFinite(ts)) continue;
+      if (ts >= EPOCH_MS_FLOOR) {
+        normalized[field] = startMs != null ? Math.max(0, (ts - startMs) / 1000) : 0;
+      } else {
+        normalized[field] = Math.max(0, ts);
+      }
     }
     return normalized;
   });
