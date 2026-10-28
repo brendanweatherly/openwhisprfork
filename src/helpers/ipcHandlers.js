@@ -13175,14 +13175,15 @@ class IPCHandlers {
       transcriptSegments.find((segment) => segment.source === diarizedSource)?.timestamp ||
       transcriptSegments[0]?.timestamp ||
       0;
-    const isEpochMs = startMs > 1e9;
     const normalized = transcriptSegments.map((seg) => ({
       ...seg,
+      // Historical or stop-fallback rows may be recording-relative seconds
+      // beside epoch-ms live chunks. Never subtract epoch ms from seconds.
       timestamp:
-        seg.timestamp != null
-          ? isEpochMs
-            ? (seg.timestamp - startMs) / 1000
-            : seg.timestamp
+        typeof seg.timestamp === "number" && Number.isFinite(seg.timestamp)
+          ? seg.timestamp > 1e11
+            ? Math.max(0, (seg.timestamp - startMs) / 1000)
+            : Math.max(0, seg.timestamp)
           : undefined,
     }));
 
@@ -13342,6 +13343,7 @@ class IPCHandlers {
                 const emb = new Float32Array(embArr);
                 let bestProfile = null;
                 let bestSim = 0;
+                let secondBestSim = 0;
 
                 for (const profile of profiles) {
                   const profileEmb = new Float32Array(
@@ -13351,12 +13353,15 @@ class IPCHandlers {
                   );
                   const sim = speakerEmb.cosineSimilarity(emb, profileEmb);
                   if (sim > bestSim) {
+                    secondBestSim = bestSim;
                     bestSim = sim;
                     bestProfile = profile;
+                  } else if (sim > secondBestSim) {
+                    secondBestSim = sim;
                   }
                 }
 
-                if (bestProfile && bestSim > 0.6) {
+                if (bestProfile && require("./speakerConfidencePolicy.cjs").canLabelBatchSpeaker(bestSim, secondBestSim)) {
                   for (const seg of enrichedSegments) {
                     if (seg.speaker === mappedId) {
                       applyConfirmedSpeaker(seg, {
@@ -13367,7 +13372,7 @@ class IPCHandlers {
                       });
                     }
                   }
-                } else if (bestProfile && bestSim > 0.5) {
+                } else if (bestProfile && bestSim > 0.6) {
                   for (const seg of enrichedSegments) {
                     if (seg.speaker === mappedId) {
                       if (isSpeakerLocked(seg)) {
