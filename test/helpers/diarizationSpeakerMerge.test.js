@@ -182,3 +182,33 @@ test("a resumed session's clusters are numbered from its speaker index base", ()
     ["speaker_3", "speaker_4"]
   );
 });
+
+test("final diarization removes a stale automatic live speaker name", () => {
+  const manager = new DiarizationManager();
+  const merged = manager.mergeWithTranscript(
+    [{
+      source: "system", timestamp: 10, text: "We need to involve the operations team.",
+      speaker: "speaker_1", speakerName: "Dan", speakerIsPlaceholder: false,
+      speakerStatus: "confirmed",
+    }],
+    [{ start: 9, end: 14, speaker: "speaker_02" }]
+  );
+  assert.equal(merged[0].speaker, "speaker_0");
+  assert.equal(merged[0].speakerName, undefined, "live Dan label must not move to batch cluster");
+  assert.equal(merged[0].text, "We need to involve the operations team.");
+});
+
+test("final diarization preserves a manually locked speaker assignment", () => {
+  const manager = new DiarizationManager();
+  const merged = manager.mergeWithTranscript(
+    [{
+      source: "system", timestamp: 10, text: "That was my statement.",
+      speaker: "speaker_4", speakerName: "Tracey", speakerIsPlaceholder: false,
+      speakerStatus: "locked", speakerLocked: true, speakerLockSource: "user",
+    }],
+    [{ start: 9, end: 14, speaker: "speaker_02" }]
+  );
+  assert.equal(merged[0].speaker, "speaker_4");
+  assert.equal(merged[0].speakerName, "Tracey");
+  assert.equal(merged[0].speakerLocked, true);
+});
