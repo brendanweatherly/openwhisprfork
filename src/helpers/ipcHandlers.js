@@ -8128,6 +8128,8 @@ class IPCHandlers {
 
     let meetingLocalMode = false;
     let meetingLocalBuffers = { mic: [], system: [] };
+    // Actual capture time, not the completion time of potentially slow ASR.
+    let meetingLocalBufferEndTimes = { mic: null, system: null };
     let meetingLocalTimer = null;
     let meetingLocalWin = null;
     let meetingLocalTranscript = "";
@@ -8212,10 +8214,13 @@ class IPCHandlers {
 
     const dispatchMeetingAudioBuffer = (buffer, source, synthetic = false, capturedAt = null) => {
       if (meetingLocalMode) {
-        // Local STT timestamps each batch with wall time, not a sample cursor.
-        // Large synthetic gaps would dilute speech and inflate the next batch.
+        // Local ASR may decode long after a chunk was recorded. Preserve the
+        // capture time for the batch so post-meeting speaker turns align.
+        // Large synthetic gaps would dilute speech and inflate the batch.
         if (synthetic) return;
         meetingLocalBuffers[source].push(buffer);
+        meetingLocalBufferEndTimes[source] =
+          Number.isFinite(capturedAt) && capturedAt > 1e11 ? capturedAt : Date.now();
         return;
       }
 
@@ -8524,7 +8529,9 @@ class IPCHandlers {
       if (!chunks.length) return;
 
       const pcm24k = Buffer.concat(chunks);
+      const recordedEndMs = meetingLocalBufferEndTimes[source] ?? Date.now();
       meetingLocalBuffers[source] = [];
+      meetingLocalBufferEndTimes[source] = null;
 
       const pcm16k = downsample24kTo16k(pcm24k);
 
@@ -8584,7 +8591,9 @@ class IPCHandlers {
             /^orukeet(?:-|$)/i.test(String(meetingLocalModel || ""))
             ? applyMeetingCorrections(rawText, meetingCorrectionMatcher)
             : rawText;
-          const segTimestamp = Date.now();
+          // Never use Date.now() after await transcribe(): CPU decoding
+          // latency can shift this passage into another person's voice turn.
+          const segTimestamp = recordedEndMs;
           let micSuppression = null;
           if (source === "mic") {
             const chunkDurationMs = (pcm24k.length / 2 / 24000) * 1000;
@@ -8759,6 +8768,7 @@ class IPCHandlers {
       this._activeMeetingNoteId = null;
       meetingLocalMode = false;
       meetingLocalBuffers = { mic: [], system: [] };
+      meetingLocalBufferEndTimes = { mic: null, system: null };
       if (meetingDiarizationStream) {
         meetingDiarizationStream.end();
         meetingDiarizationStream = null;
@@ -9415,6 +9425,7 @@ class IPCHandlers {
           meetingLocalLanguage = options.language || null;
           meetingLocalWin = BrowserWindow.fromWebContents(event.sender);
           meetingLocalBuffers = { mic: [], system: [] };
+      meetingLocalBufferEndTimes = { mic: null, system: null };
           meetingLocalTranscript = "";
 
           await startLiveSpeakerIdentification(meetingLocalWin, systemAudioMode);
@@ -12991,6 +13002,7 @@ class IPCHandlers {
     }
 
     const speakerEmbeddings = require("./speakerEmbeddings");
+    const { canLabelBatchSpeaker } = require("./speakerConfidencePolicy.cjs");
     const reconciledSpeakers = new Set();
     const usedLiveSpeakers = new Set();
     const noteMappings = new Map();
@@ -13015,6 +13027,7 @@ class IPCHandlers {
     for (const [mappedId, embeddingArray] of Object.entries(speakerEmbeddingsMap)) {
       let bestEntry = null;
       let bestSimilarity = 0;
+      let secondBestSimilarity = 0;
 
       for (const entry of liveEntries) {
         if (usedLiveSpeakers.has(entry.speakerId)) {
@@ -13026,12 +13039,15 @@ class IPCHandlers {
           entry.embedding
         );
         if (similarity > bestSimilarity) {
+          secondBestSimilarity = bestSimilarity;
           bestSimilarity = similarity;
           bestEntry = entry;
+        } else if (similarity > secondBestSimilarity) {
+          secondBestSimilarity = similarity;
         }
       }
 
-      if (!bestEntry || bestSimilarity <= 0.6) {
+      if (!bestEntry || !canLabelBatchSpeaker(bestSimilarity, secondBestSimilarity)) {
         continue;
       }
 
