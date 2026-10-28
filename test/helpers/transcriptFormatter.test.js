@@ -297,6 +297,32 @@ test("epoch-millisecond segment timestamps export relative to the recording star
   assert.match(mdOutput, /`00:07:57`/);
 });
 
+test("mixed elapsed-second and epoch-millisecond segments export sane, ordered times", () => {
+  const epoch = 1_754_310_000_000;
+  const note = { title: "Meeting", created_at: "2026-08-04T13:02:00Z" };
+  const segments = [
+    { speaker: "speaker_0", timestamp: 4, text: "Early speech." },
+    { speaker: "speaker_1", timestamp: epoch, text: "Second voice." },
+    { speaker: "speaker_1", timestamp: epoch + 5000, text: "Later speech." },
+  ];
+
+  const json = JSON.parse(formatJson(note, segments, {}));
+  const times = json.segments.map((s) => s.timestamp);
+  assert.equal(times[0], 4);
+  assert.ok(times[1] > times[0]);
+  assert.equal(Math.floor(times[2]), 9);
+  assert.ok(times.every((time) => time >= 0 && time < 3600));
+
+  const txt = formatTxt(note, segments, {});
+  assert.match(txt, /\[00:00:04\] Speaker 1:/);
+  assert.match(txt, /\[00:00:09\] Speaker 2:/);
+  assert.doesNotMatch(txt, /\[\d{6,}:/);
+
+  const srt = formatSrt(segments, {}, note);
+  assert.match(srt, /00:00:04,000 --> 00:00:04,001/);
+  assert.match(srt, /00:00:04,001 --> 00:00:09,001/);
+});
+
 test("SQLite UTC note timestamps are parsed as UTC before local formatting", () => {
   const { parseNoteDate } = require("../../src/helpers/transcriptFormatter");
   const parsed = parseNoteDate("2026-08-04 13:02:00");
