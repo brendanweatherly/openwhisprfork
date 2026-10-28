@@ -11,6 +11,7 @@ const { ANALYTICS_HISTORY_BACKFILL_VERSION } = require("./analytics");
 const { PARAKEET_UNSUPPORTED_OS_CODE } = require("./parakeetCapability");
 const { getModelType, isSherpaLocalProvider } = require("./parakeetModelInfo");
 const { compileMeetingCorrections, applyMeetingCorrections } = require("./meetingCorrections.cjs");
+const { canLabelBatchSpeaker } = require("./speakerConfidencePolicy.cjs");
 const { broadcastToWindows } = require("./windowBroadcast");
 const { openExternalUrl } = require("./externalUrlOpener");
 const { resolveFailedGpuBackends } = require("./whisper");
@@ -9425,7 +9426,7 @@ class IPCHandlers {
           meetingLocalLanguage = options.language || null;
           meetingLocalWin = BrowserWindow.fromWebContents(event.sender);
           meetingLocalBuffers = { mic: [], system: [] };
-      meetingLocalBufferEndTimes = { mic: null, system: null };
+          meetingLocalBufferEndTimes = { mic: null, system: null };
           meetingLocalTranscript = "";
 
           await startLiveSpeakerIdentification(meetingLocalWin, systemAudioMode);
@@ -13002,7 +13003,6 @@ class IPCHandlers {
     }
 
     const speakerEmbeddings = require("./speakerEmbeddings");
-    const { canLabelBatchSpeaker } = require("./speakerConfidencePolicy.cjs");
     const reconciledSpeakers = new Set();
     const usedLiveSpeakers = new Set();
     const noteMappings = new Map();
@@ -13361,7 +13361,7 @@ class IPCHandlers {
                   }
                 }
 
-                if (bestProfile && require("./speakerConfidencePolicy.cjs").canLabelBatchSpeaker(bestSim, secondBestSim)) {
+                if (bestProfile && canLabelBatchSpeaker(bestSim, secondBestSim)) {
                   for (const seg of enrichedSegments) {
                     if (seg.speaker === mappedId) {
                       applyConfirmedSpeaker(seg, {
