@@ -5,6 +5,13 @@ const { MAX_EMBEDDING_SECONDS } = speakerEmbeddings;
 const { downsample24kTo16k, pcm16ToFloat32 } = require("../utils/audioUtils");
 const { MAX_SPEAKER_COUNT } = require("../constants/speakerDetection.json");
 const { normalizeSpeakerIndexBase } = require("./speakerIndexBase");
+const {
+  LIVE_MATCH_SIMILARITY,
+  LIVE_MATCH_MARGIN,
+  LIVE_OVERFLOW_SIMILARITY,
+  isConfidentMatch,
+  mayMergeLiveSpeakers,
+} = require("./speakerConfidencePolicy.cjs");
 
 function clampMaxSpeakers(value) {
   const n = Number(value);
@@ -46,8 +53,6 @@ const SPEECH_CHUNKS_MAX_SAMPLES = MAX_EMBEDDING_SAMPLES * 4;
 const SPEECH_THRESHOLD = 0.15;
 const SILENCE_THRESHOLD = 0.08;
 const SILENCE_WINDOWS_TO_END = 24;
-const MATCH_THRESHOLD = 0.65;
-const MATCH_MARGIN = 0.03;
 const LIVE_WINDOW_PADDING_SECONDS = 0.75;
 // The 24 kHz -> 16 kHz resampler restarts on every buffer and only divides
 // evenly on whole groups of 3 input samples (6 bytes). Capture buffers come in
@@ -283,16 +288,17 @@ class LiveSpeakerIdentifier {
         if (removed.has(speakers[j][0])) continue;
 
         const similarity = speakerEmbeddings.cosineSimilarity(speakers[i][1], speakers[j][1]);
-        if (similarity < MATCH_THRESHOLD) continue;
-
-        // Confirmed-distinct identities (different profiles, or different
-        // user-set names) must never merge on embedding similarity alone.
         const profileI = this.transientProfileIds.get(speakers[i][0]);
         const profileJ = this.transientProfileIds.get(speakers[j][0]);
-        if (profileI != null && profileJ != null && profileI !== profileJ) continue;
         const nameI = this.transientDisplayNames.get(speakers[i][0]);
         const nameJ = this.transientDisplayNames.get(speakers[j][0]);
-        if (nameI && nameJ && nameI !== nameJ) continue;
+        if (!mayMergeLiveSpeakers({
+          similarity,
+          nameA: nameI,
+          nameB: nameJ,
+          profileA: profileI,
+          profileB: profileJ,
+        })) continue;
 
         const countI = this.transientCounts.get(speakers[i][0]) || 1;
         const countJ = this.transientCounts.get(speakers[j][0]) || 1;
@@ -702,10 +708,9 @@ class LiveSpeakerIdentifier {
       }
     }
 
-    return bestSimilarity >= MATCH_THRESHOLD &&
-      bestSimilarity - secondBestSimilarity >= MATCH_MARGIN
-      ? bestSpeakerId
-      : null;
+    return isConfidentMatch(
+      bestSimilarity, secondBestSimilarity, LIVE_MATCH_SIMILARITY, LIVE_MATCH_MARGIN
+    ) ? bestSpeakerId : null;
   }
 
   _findStoredProfileMatch(embedding) {
@@ -744,10 +749,9 @@ class LiveSpeakerIdentifier {
       }
     }
 
-    return bestSimilarity >= MATCH_THRESHOLD &&
-      bestSimilarity - secondBestSimilarity >= MATCH_MARGIN
-      ? bestProfile
-      : null;
+    return isConfidentMatch(
+      bestSimilarity, secondBestSimilarity, LIVE_MATCH_SIMILARITY, LIVE_MATCH_MARGIN
+    ) ? bestProfile : null;
   }
 
   _resolveSpeakerForEmbedding(embedding, options = {}) {
@@ -784,7 +788,7 @@ class LiveSpeakerIdentifier {
       if (forced) {
         return {
           speakerId,
-          displayName: this.transientDisplayNames.get(speakerId) || null,
+          displayName: speakerId ? (this.transientDisplayNames.get(speakerId) || null) : null,
         };
       }
 
@@ -821,6 +825,9 @@ class LiveSpeakerIdentifier {
         // mid-meeting).
         return { speakerId: nearest, forced: true };
       }
+      // Never attach a dissimilar overflow voice to a known participant.
+      // Leave the passage unidentified until full-recording diarization.
+      return { speakerId: null, forced: true };
     }
     return { speakerId: this._assignSpeakerId(embedding), forced: false };
   }
@@ -835,7 +842,7 @@ class LiveSpeakerIdentifier {
         bestSpeakerId = speakerId;
       }
     }
-    return bestSpeakerId;
+    return bestSimilarity >= LIVE_OVERFLOW_SIMILARITY ? bestSpeakerId : null;
   }
 
   _findTransientSpeakerForProfile(profileId) {
