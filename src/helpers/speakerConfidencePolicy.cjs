@@ -2,12 +2,12 @@
 
 // Conservative speaker identification: an uncertain label is preferable to
 // assigning an entire person's statements to another named participant.
-const LIVE_MATCH_SIMILARITY = 0.80;
+const LIVE_MATCH_SIMILARITY = 0.88;
 const LIVE_MATCH_MARGIN = 0.08;
-const LIVE_RECLUSTER_SIMILARITY = 0.90;
-const LIVE_OVERFLOW_SIMILARITY = 0.80;
-const BATCH_LABEL_SIMILARITY = 0.86;
-const BATCH_LABEL_MARGIN = 0.08;
+const LIVE_RECLUSTER_SIMILARITY = 0.93;
+const LIVE_OVERFLOW_SIMILARITY = 0.88;
+const BATCH_LABEL_SIMILARITY = 0.90;
+const BATCH_LABEL_MARGIN = 0.10;
 
 function isConfidentMatch(bestSimilarity, runnerUpSimilarity = 0, threshold = LIVE_MATCH_SIMILARITY, margin = LIVE_MATCH_MARGIN) {
   return Number.isFinite(bestSimilarity) &&
