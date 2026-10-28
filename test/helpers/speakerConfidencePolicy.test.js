@@ -7,6 +7,7 @@ const {
 test("a borderline match never receives another person's live speaker label", () => {
   assert.equal(isConfidentMatch(0.655, 0), false);
   assert.equal(isConfidentMatch(0.79, 0), false);
+  assert.equal(isConfidentMatch(0.863, 0), false, "meeting false-merge scores should not label voices");
   assert.equal(isConfidentMatch(0.88, 0.85), false);
   assert.equal(isConfidentMatch(0.90, 0.70), true);
 });
