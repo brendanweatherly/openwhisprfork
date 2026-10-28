@@ -665,8 +665,10 @@ function assignProvisionalSpeaker(segment: TranscriptSegment): TranscriptSegment
     return normalizeTranscriptSegment({
       ...segment,
       speaker: recent.speakerId,
-      speakerName: recent.speakerName ?? undefined,
-      speakerIsPlaceholder: recent.speakerIsPlaceholder,
+      // A recent cluster is a useful hint, not proof this is still the
+      // same person. Do not carry its confirmed name to a new voice.
+      speakerName: undefined,
+      speakerIsPlaceholder: true,
       speakerStatus: "provisional",
     });
   }
@@ -686,7 +688,7 @@ function assignProvisionalSpeaker(segment: TranscriptSegment): TranscriptSegment
     return normalizeTranscriptSegment({
       ...segment,
       speaker: previousSystemSegment.speaker,
-      speakerName: previousSystemSegment.speakerName,
+      speakerName: undefined,
       speakerIsPlaceholder: true,
       speakerStatus: "provisional",
     });
@@ -1133,9 +1135,13 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
                 }
                 const provisional = assignProvisionalSpeaker(decorated);
                 reserveSpeakerIndex(provisional.speaker);
-                const lockedName = provisional.speaker
-                  ? speakerLocks.get(provisional.speaker)
-                  : undefined;
+                // A placeholder can reuse a cluster ID when the speaker cap
+                // is reached. Only copy a user-approved name onto a voice
+                // the live identifier actually matched to that speaker.
+                const lockedName =
+                  provisional.speaker && provisional.speakerStatus !== "provisional"
+                    ? speakerLocks.get(provisional.speaker)
+                    : undefined;
                 return lockedName
                   ? lockTranscriptSpeaker(provisional, {
                       speakerName: lockedName,
