@@ -1,28 +1,27 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
-**Last updated:** 2026-10-29 - user-reported automated checks complete; recorded replay pending
+**Last updated:** 2026-10-29 - Windows compiler missing during speaker replay startup
 **Current milestone:** Validate automatic speaker discovery with a real Teams recording replay
-**Active work ID:** `OW-SPK-REPLAY-20261029`
-**Canonical next action:** Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
+**Active work ID:** `OW-WIN-TOOLCHAIN-20261029`
+**Canonical next action:** Enable a Windows C++ compiler in a Developer Command Prompt and relaunch the working-branch app to build the modified audio helper.
 **State source:** `PROJECT_STATE.md`
 **Preserved baseline:** `fix/meeting-speaker-timestamps-20261028`
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 
 ## Current Target
 
-[OW-SPK-REPLAY-20261029] Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
+[OW-WIN-TOOLCHAIN-20261029] Enable a Windows C++ compiler in a Developer Command Prompt and relaunch the working-branch app to build the modified audio helper.
 
 ## Why This Is Next
 
-The user reports no errors running the five-file speaker regression suite, `npm run typecheck`, and `npm run build:renderer` on Windows. Detailed test/build logs were not shared, so this is **user-reported success**, not independently inspected output. We now need actual recording input through the changed meeting-capture/post-stop pipeline. Merely importing an MP4 may exercise the upload pipeline instead and would not prove this fix.
+The user's focused regression tests, typecheck and renderer build reportedly completed without errors. On Oct. 29, running `npm start` in the extracted working-branch checkout failed immediately in `compile:windows-system-audio-helper`, because both `cl.exe` and `gcc.exe` returned `spawnSync ... ENOENT`. This is a missing/inaccessible C++ compiler, not evidence of an acoustic clustering regression. Restore the compiler environment and launch before attempting the real Teams replay.
 
 ## Latest Material Evidence
 
-- `c0e30a83`: final meeting diarization discovers native clusters without forcing a count and applies only explicit/saved hard caps after discovery.
-- `1bf18822` and `c730772`: speaker policy and post-stop regression tests committed.
-- 2026-10-29: user reported **no errors** with all requested local commands: focused speaker regression suite, `npm run typecheck`, and `npm run build:renderer`. No raw stdout, test totals, or artifacts have been inspected.
-- AirPods system capture was previously observed working; FxSound was silent in the prior route.
-- **A replay through this working branch, speaker identity review, audio retention, and Windows installer validation remain untested.**
+- Code commits `c0e30a83`, `1bf18822`, `c730772` remain on the working branch; automated tests/typecheck/renderer build were user-reported clean without raw logs.
+- On 2026-10-29 `npm start` failed during `prestart` at `compile:windows-system-audio-helper` with `cl.exe spawnSync cl.exe ENOENT` and `gcc.exe spawnSync gcc.exe ENOENT`. Node version was v24.22.1 and is not the cause.
+- Verified build script `scripts/build-windows-system-audio-helper.js` compiles `resources/windows-system-audio-helper.c` into `resources/bin/windows-system-audio-helper.exe` using MSVC or GCC; it rejects replacing this modified helper with an upstream binary lacking `--device-id`.
+- Prior AirPods capture worked; FxSound was silent. A working-branch meeting replay remains unperformed.
 
 ## Current Hypothesis or Decision Point
 
@@ -32,14 +31,15 @@ The user reports no errors running the five-file speaker regression suite, `npm 
 
 ## Next Action / Test
 
-**Active work ID:** `OW-SPK-REPLAY-20261029`
-**Action:** [OW-SPK-REPLAY-20261029] Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
+**Active work ID:** `OW-WIN-TOOLCHAIN-20261029`
+**Action:** [OW-WIN-TOOLCHAIN-20261029] Enable a Windows C++ compiler in a Developer Command Prompt and relaunch the working-branch app to build the modified audio helper.
 
-Use the extracted working-branch source checkout; launch with `npm start` (which must compile the modified Windows output helper and downloads). This dev Electron launch uses a separate `OpenWhispr-development` profile, not the installed production app's userData. Ensure the existing Teams MP4 is locally accessible, selected Windows output is the previously working AirPods endpoint, and native diarization models are installed.
+1. From Windows Start, check for **x64 Native Tools Command Prompt for VS**. If present, open it, run `cl`, and navigate to the already-extracted working-branch folder.
+2. If missing, install **Build Tools for Visual Studio** with **Desktop development with C++**, MSVC x64/x86 toolset, and Windows SDK. Then open its x64 Native Tools Command Prompt (not ordinary cmd).
+3. In that developer prompt, `cd /d` to the exact extracted branch directory, set `OPENWHISPR_CHANNEL=development` and `OPENWHISPR_LOG_LEVEL=debug`, and run `npm start`.
+4. Verify `Built modified audio helper:` and successful Electron launch. If another prestart stage errors, record the new error and retain this as a blocker.
 
-Play a representative segment containing multiple distinct speakers **through that AirPods output while OpenWhispr is actively recording a meeting note**. Do not manually change the default speaker stepper for the first run. Let final diarization complete after Stop. Review actual detected voices vs known voices and collect application logs reporting `nativeAudioClusters`, `speakerCap`, `speakerCapSource`, `audioClusters`, and any misidentified passages. Keep customer/private meeting audio off public GitHub.
-
-**Expected proof:** Real final diarization preserves the distinct voices despite the untouched default, does not apply stale live names incorrectly, and saves final transcript. A playback of the Teams MP4 entirely through system audio does **not** validate real live mic/system separation; that remains a separate acceptance check.
+**Once launched:** Replay a known Teams MP4 section through the selected, known-good AirPods output while recording a meeting note; do not import it directly or touch the default speaker stepper. Evaluate final clusters/names and logs before adjusting algorithms. Playback via system output does not test real simultaneous mic/system capture.
 
 ## Regression Checks
 
@@ -52,11 +52,13 @@ Play a representative segment containing multiple distinct speakers **through th
 
 ## Immediate Branches
 
-- Positive -> Preserve playback evidence, independently validate live mic/system split, then decide whether to accept decision 0005 and promote the branch.
-- Negative -> Inspect raw/final cluster counts and actual speech before tuning thresholds or changing identity policy.
-- Inconclusive -> Confirm the source checkout is the working branch, the AirPods playback was recorded, and diarization models were available before repeating.
+- Compiler available and app starts -> Resume Teams system-output playback and final diarization validation.
+- Compiler unavailable or native build fails -> Resolve installation/environment or compiler diagnostics; never bypass the custom helper with upstream binary.
+- Another prestart error -> Troubleshoot the new prerequisite independently, preserving successful speaker test results and known-good code.
 
 ## Blockers / Needed Inputs
 
-- Local Windows working-branch checkout already has dependencies, and the user reports successful automated checks. The next real replay requires an available Teams recording and a startable source app.
-- `npm start` may compile/download native resources; missing diarization models can cause a silent diarization skip. No user data or customer transcripts should be committed to the public repo.
+- **Current blocker:** Visual C++ `cl.exe` and GCC `gcc.exe` not found when building the mandatory modified Windows audio helper, so `npm start` stops before Electron.
+- Once fixed: real Teams MP4 playback through the working-branch meeting recording pipeline and diarization model availability remain to be verified.
+- Do not commit customer audio, private technical terms, or confidential transcripts to this public repository.
+
