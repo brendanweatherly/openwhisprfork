@@ -71,3 +71,17 @@
 **Status:** The earlier single-speaker collapse was not repeated, but the real speaker-accuracy acceptance test **failed**; proposed decision 0005 stays unaccepted. Do not conflate zero automatic speaker names with a failure to detect acoustic clusters. Uploaded reference content, customer names and raw audio stay outside the public repository.
 **New user requirement:** Show a prominent, stage-aware progress overlay during post-stop diarization so the user knows what the app is doing. The existing small finalizing pill is insufficient. Decision 0006 records the request, stage/elapsed-time behavior, terminal states and no-fake-percent rule. Implementation pending.
 **Priority now:** Build anonymized failing tests to separate cap folding from acoustic over-splitting and transcript-to-voice alignment; fix the measured root cause without regressing known-good capture, timestamp and correction behavior. Then implement visible diarization progress and replay validation.
+
+## 2026-10-29 - Voice-aware cap candidate integrated after prior-chat recovery
+
+**Prior chat recovered:** Earlier four-speaker meeting showed `numSpeakers=-1` but only one final cluster due to the default/inferred cap, despite mixed voices. Oct. 28 timestamp/end-as-start and stale-name fixes remain known-good. User specifically required re-diarization from retained audio after changing speaker count without repeating the meeting, preserving original transcript, technical corrections, and user locks. Conversion WAVs were temporary; durable source-audio availability is still to be proven. These requirements are now recorded in Decision 0007.
+
+**Confirmed first replay failure:** Six people in an overlapping Teams transcript excerpt vs seven app speaker placeholders, and one label covered 21 of 35 chunks across different people. Native diarization produced nine clusters and auto mode folded to seven via duration-only logic.
+
+**Code change:** `8bab551` reuses the existing upload path's `speakerEmbeddings.extractClusterCentroids` plus `capSpeakerClustersByVoice` in the post-stop meeting pipeline when the native number exceeds the cap; adds numeric remap and strategy diagnostics. It still logs/uses a duration-only fallback if centroids are unavailable. The source transcription and timestamp/lock logic was intentionally left unchanged to isolate the effect.
+
+**New regression:** `d95a7ec` exercises nine synthetic acoustic groups and verifies both overflow clusters route to their acoustically matching retained voices, not automatically to the dominant cluster. An isolated standalone run of the pure voice-cap algorithm passed; full repository tests and real replay remain unrun after this patch.
+
+**Unresolved:** Native over-segmentation, ASR chunks crossing speaker turns, the ability to reprocess from retained audio, and the user-requested progress overlay. Decision 0005 remains proposed; Decision 0006 and Decision 0007 are accepted user requirements with implementation pending.
+
+**Priority now:** Execute updated focused tests and a new replay of the **same** Teams excerpt, checking `capStrategy`, `capEmbeddingCoverage`, numeric remaps and stable human speaker attribution. If this fails, separate native acoustic clustering from text-chunk speaker alignment rather than tuning models speculatively.
