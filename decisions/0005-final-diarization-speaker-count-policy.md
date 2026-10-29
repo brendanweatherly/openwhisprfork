@@ -1,6 +1,6 @@
 # Decision 0005 - Final diarization uses native speaker discovery; only user-set counts limit it
 
-**Status:** Proposed (implemented on the working branch; tests and real replay pending)
+**Status:** Proposed (implemented; regression tests user-reported clean, but October 29 real replay FAILED speaker-attribution acceptance)
 **Date:** 2026-10-29
 **Decision owner:** OpenWhispr fork project (technical proposal; user approval not inferred)
 **Supersedes:** Previous implicit behavior that allowed defaults, calendar rosters, and provisional live cluster counts to cap final results
@@ -43,9 +43,17 @@ An inferred count is not strong enough evidence to discard genuine voices. Speak
 - Prior isolated fix `codex/raw-speaker-collapse-fix` commit `6adfb77361c88dd8e0559fb9ce1d884e58d57050`.
 - Prior real meeting reportedly collapsed four participants to one cluster.
 
+## Real-replay evidence (2026-10-29)
+
+A real Teams playback through the working-branch meeting recorder produced native **9** acoustic clusters, automatically capped to **7**, over **36** acoustic turns and **35** transcript segments. The overlapping reference contained approximately **6** identifiable voices. One final placeholder label owned **21 of 35** transcript segments and was associated with multiple different real voices; other individual real voices were fragmented across several labels.
+
+The log reported `speakerCapSource: "auto"` and `namedSegments: 0`. A missing assigned name is not by itself a clustering error; mixed and split voices are the failure. Code inspection confirms the meeting path's `capSpeakerClusters` folds all above-cap clusters onto the longest remaining speaker, unlike the voice-similarity-based strategy found in the separate upload pipeline.
+
+The trial avoided the former single-speaker collapse but **did not satisfy** the acoustic-identity acceptance gate. The maximum-cap and transcript-turn alignment policy require diagnosis; do not silently call this proposed decision Accepted. The private transcript and participant names are intentionally not committed.
+
 ## Acceptance gate
 
-Promote this proposed decision to **Accepted** only after focused regression tests, typecheck/build, and a representative multi-speaker replay demonstrate correct behavior without regressing user locks, timestamps, identity persistence, corrections, or working audio paths.
+Keep this proposal **unaccepted** after the failed real replay. Diagnose the destructive 9-to-7 automatic cap and transcript-turn alignment; then require focused regression tests, typecheck/build, and a new representative replay demonstrating distinct, stable speaker IDs, correct timestamps and no regressions to user locks, corrections or selected audio paths.
 
 ## Reopen only if
 
