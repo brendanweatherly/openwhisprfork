@@ -12,6 +12,8 @@ const electronStub = {
     getName: () => "test",
     getVersion: () => "0.0.0",
     isPackaged: false,
+    // Logger must also work when OPENWHISPR_LOG_LEVEL=debug is inherited from npm start.
+    isReady: () => false,
     on: () => {},
     requestSingleInstanceLock: () => true,
   },
