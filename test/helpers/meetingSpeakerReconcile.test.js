@@ -495,3 +495,102 @@ test("an explicit live stepper choice overrides a different saved count", async 
   assert.deepEqual(calls.caps, [1], "two total speakers allow one remote cluster");
   assert.equal(new Set(payload.segments.map((seg) => seg.speaker)).size, 1);
 });
+
+
+// Real meeting regression: nine acoustic groups were capped to seven, and the
+// old meeting-only cap merged BOTH extras into the longest-duration speaker.
+// The upload pipeline already uses voice centroids to choose the nearest kept
+// cluster; the post-stop meeting pipeline must apply that same policy.
+test("voice-aware meeting cap routes nine raw clusters to matching kept voices, not the dominant speaker", async (t) => {
+  const { IPCHandlers } = loadHandlers();
+  const DiarizationManager = loadDiarizationManager();
+  const speakerEmbeddings = require("../../src/helpers/speakerEmbeddings");
+
+  const vectors = [
+    [1, 0, 0], [0, 1, 0], [0, 0, 1], [-1, 0, 0],
+    [0, -1, 0], [0, 0, -1], [0.6, 0.8, 0],
+    [0, 0.95, 0.05], [0.05, 0, -0.95],
+  ];
+  const raw = vectors.map((_, index) => ({
+    start: index * 7, end: index * 7 + 5,
+    speaker: "speaker_" + String(index).padStart(2, "0"),
+  }));
+  const centroids = new Map(raw.map((segment, index) => [segment.speaker, vectors[index]]));
+  const calls = { extracts: 0, legacyCaps: 0 };
+  t.mock.method(speakerEmbeddings, "isAvailable", () => true);
+  t.mock.method(speakerEmbeddings, "extractClusterCentroids", async (path, segments) => {
+    calls.extracts += 1;
+    assert.equal(path, "/nonexistent/ow-voice-cap.wav");
+    assert.equal(new Set(segments.map((segment) => segment.speaker)).size, 9);
+    return centroids;
+  });
+  t.mock.method(speakerEmbeddings, "cosineSimilarity", (a, b) =>
+    a.reduce((sum, value, index) => sum + value * b[index], 0)
+  );
+  // Later speaker-profile matching is a separate stage; no profile data in
+  // this test, and the fake path contains no WAV file.
+  t.mock.method(speakerEmbeddings, "extractEmbedding", async () => null);
+
+  const diarizationManager = new DiarizationManager();
+  const originalCap = diarizationManager.capSpeakerClusters.bind(diarizationManager);
+  Object.assign(diarizationManager, {
+    isAvailable: () => true,
+    convertRawPcmToWav: async () => "/nonexistent/ow-voice-cap.wav",
+    diarize: async () => raw,
+    capSpeakerClusters: (...args) => {
+      calls.legacyCaps += 1;
+      return originalCap(...args);
+    },
+  });
+
+  const sent = [];
+  const win = {
+    isDestroyed: () => false,
+    webContents: { send: (channel, payload) => sent.push({ channel, payload }) },
+  };
+  const handlers = Object.assign(Object.create(IPCHandlers.prototype), {
+    _diarizationSpeakerReservations: new Map(),
+    speakerDiarizationEnabled: true,
+    diarizationManager,
+    databaseManager: {
+      getNote: () => ({ expected_speaker_count: null }),
+      getSpeakerProfiles: () => [],
+      getSpeakerMappings: () => [],
+      getNoteSpeakerEmbeddings: () => [],
+    },
+  });
+
+  const transcript = raw.map((segment, index) => ({
+    id: "row_" + index, source: "system",
+    timestamp: segment.start + 1, text: "phrase " + index,
+    speaker: "speaker_0", speakerName: "Unreviewed provisional label",
+  }));
+  handlers._startOrSkipDiarization(
+    "voice-cap-session",
+    "/nonexistent/ow-voice-cap.pcm",
+    0,
+    transcript,
+    win,
+    null,
+    { enabled: true, expectedCount: 2, explicit: false },
+    NOTE_ID,
+    "system",
+    0
+  );
+
+  for (let i = 0; i < 50 && sent.length === 0; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(sent.length, 1, "final diarization must complete");
+  assert.equal(sent[0].channel, "meeting-diarization-complete");
+  assert.equal(calls.extracts, 1, "cap uses original nine native voice groups");
+  assert.equal(calls.legacyCaps, 0, "voice evidence must bypass the old duration-only cap");
+  const result = sent[0].payload.segments;
+  assert.deepEqual(result.map((segment) => segment.text), transcript.map((segment) => segment.text));
+  assert.deepEqual(result.map((segment) => segment.speaker), [
+    "speaker_0", "speaker_1", "speaker_2", "speaker_3",
+    "speaker_4", "speaker_5", "speaker_6", "speaker_1", "speaker_5",
+  ]);
+  assert.ok(result.every((segment) => !segment.speakerName),
+    "a provisional live name must not carry over to final acoustic groups");
+});
