@@ -1,12 +1,12 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
 **Last reconciled:** 2026-10-29
-**State confidence:** High for committed code; unverified for the new change in a live recording
-**Current milestone:** Validate automatic speaker discovery before real-meeting replay
+**State confidence:** High for committed code; user reports focused tests, typecheck, and renderer build completed without errors (logs not supplied); unverified in real recording.
+**Current milestone:** Validate automatic speaker discovery with a real Teams recording replay
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
-**Active work ID:** `OW-SPK-VALIDATION-20261029`
-**Canonical next action:** Run focused speaker-regression tests on the working branch.
+**Active work ID:** `OW-SPK-REPLAY-20261029`
+**Canonical next action:** Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
 **Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
@@ -73,7 +73,7 @@ Meeting detection/start
 
 | Problem | Layer | Impact | Evidence / status |
 |---|---|---|---|
-| Native forced-count and inferred single-remote cap caused speaker-collapse risk | Final diarization | Real voices can be lost | Confirmed in Oct. 28 baseline; mitigation committed to working branch, **not tested** |
+| Native forced-count and inferred single-remote cap caused speaker-collapse risk | Final diarization | Real voices can be lost | Confirmed in Oct. 28 baseline; mitigation committed; focused tests/build reportedly completed without errors, but real meeting behavior remains unverified |
 | Real meeting produced wrong/phantom speaker names and merges | Identity reconciliation | Attribution cannot be trusted | Oct. 28 live meeting; newer confidence/timestamp fixes require re-validation |
 | Global speaker rename did not propagate as expected | Correction workflow | User cannot efficiently repair transcript | User-observed failure; not yet proven corrected |
 | Technical ASR errors remain, including meaningful wording reversals | Transcription | Invalid scope statements/meeting minutes | Orukeet comparison; Whisper Turbo took ~45 min for 37 min and still reversed a statement |
@@ -84,7 +84,7 @@ Meeting detection/start
 
 | Type | Item | Evidence / next proof |
 |---|---|---|
-| Confirmed code change | On working branch native final diarization no longer receives forced `numSpeakers`; count cap follows native discovery | Commits `c0e30a83` and `1bf18822`; **tests not run** |
+| Confirmed code change | On working branch native final diarization no longer receives forced `numSpeakers`; count cap follows native discovery | Commits `c0e30a83`, `1bf18822`, `c730772`; user reports test run without errors, detailed output not retained |
 | Hypothesis | Auto clustering plus explicit-only cap will preserve remote speakers better than baseline | Targeted tests then known four-participant replay |
 | Observation | Earlier false speaker labels had multiple causes: clocks, stale names, provisional merge, and native clustering | Do not attribute all errors to one threshold |
 | Unknown | Whether the new cap source policy preserves user locks, note state, source audio, and timestamp mapping in real meetings | Regression tests + replay |
@@ -104,25 +104,25 @@ Meeting detection/start
 
 - Speaker validation requires correctly captured mic/system tracks; AirPods is the known working path, FxSound was silent in the tested path.
 - Speaker reconciliation depends on accurate timestamp alignment and final acoustic clusters; UI renaming is a downstream recovery tool, not a substitute for acoustic correctness.
-- **The implementation step is committed; current dependency is verification.** Unit tests and build/typecheck should precede real-meeting replay and branch promotion.
+- **The implementation is committed and user-reported focused test/typecheck/renderer-build commands completed without errors; independent logs were not provided.** The next dependency is a controlled real-recording replay before any branch promotion.
 - Real Teams replay must check native count, capped count, final names, locks, source retention, and completion delivery; do not infer success from a code diff.
 - Summaries and minutes depend on transcript semantics; do not choose a slower ASR model merely for isolated vocabulary improvement.
 
 ## 9. Current Priority Order
 
-1. [OW-SPK-VALIDATION-20261029] Run focused speaker-regression tests on the working branch.
-2. Run typecheck and renderer build, preserving timestamp, confidence, correction, and UI behavior.
-3. Replay the known multi-participant Teams recording and inspect native vs final clusters, identities, locks, and source audio.
-4. If replay passes, evaluate promotion of the work branch and accepted decision; otherwise diagnose the measured failure.
-5. Fix global rename/re-diarization UX after acoustic clustering is stable, then improve practical ASR accuracy and clean Windows installation.
+1. [OW-SPK-REPLAY-20261029] Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
+2. Compare raw/native and final speaker cluster counts, cap source, incorrect assignments, user locks, and diarization completion against known speech.
+3. If replay shows a regression, isolate whether capture, acoustic clustering, capping, timestamp alignment, or identity reconciliation caused it before changing code.
+4. After a successful replay, assess decision 0005 for acceptance and consider branch promotion while preserving the Oct. 28 baseline.
+5. Fix global rename/re-diarization UX, then address technical ASR semantics, clean installer, and remaining reliability checks.
 
 ## 10. Current Focus
 
 - Active context: `ACTIVE_CONTEXT.md`
-- Active work ID: `OW-SPK-VALIDATION-20261029`
-- Current target: [OW-SPK-VALIDATION-20261029] Run focused speaker-regression tests on the working branch.
+- Active work ID: `OW-SPK-REPLAY-20261029`
+- Current target: [OW-SPK-REPLAY-20261029] Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: code and expanded regression tests committed (`c730772`); full project tests **not executed**; replay **not executed**.
+- Current status: code and regression tests committed; user reports no errors from focused tests, `npm run typecheck`, or `npm run build:renderer`. Raw logs unavailable; Windows live/recorded replay not yet performed.
 
 ## 11. Recent Material State Changes
 
@@ -131,12 +131,12 @@ Meeting detection/start
 | Oct. 28 timestamp/confidence/stale-name protection | Focused tests passed earlier | Preserve in the working branch |
 | Orukeet post-decode corrections | Focused tests and a live correction passed earlier | Preserve device-local behavior |
 | Turbo full-video comparison | ~45 min processing for 37 min; material meaning error | Do not replace Orukeet default based on word improvements |
-| Auto-cluster-before-cap + explicit-only final speaker limits | Code commit `c0e30a83`, tests commits `1bf18822` and `c730772` | **Implementation complete; validation pending** |
+| Auto-cluster-before-cap + explicit-only final speaker limits | Code commit `c0e30a83`, tests `1bf18822` and `c730772`; user-reported focused tests/build had no errors | **Automated stage user-reported clean; real replay pending** |
 | First v2 pilot state audit | Old current sections conflicted with appended event | Reconciled current sections; event moved to `history/`; decision 0005 created |
 
 ## 12. Open Risks / Regression Watchlist
 
-- New auto-discovery behavior is **not validated** by executed tests or real recording.
+- User reports focused speaker tests, typecheck and renderer build completed with no errors, but test output was not provided; real audio replay is **not validated**.
 - `capSpeakerClusters` can fold over-segmented voices into retained clusters; inspect raw and final counts.
 - Preserve user speaker locks, separate mic/system source timestamps, and final speaker delivery.
 - Prevent stale provisional speaker names from overriding final identities.
@@ -146,10 +146,10 @@ Meeting detection/start
 
 ## 13. Next Best Step
 
-**Active work ID:** `OW-SPK-VALIDATION-20261029`
-**Next:** [OW-SPK-VALIDATION-20261029] Run focused speaker-regression tests on the working branch.
-**Why:** The implementation exists but has not been executed in a Node/Electron test environment; testing now outranks additional diarization tuning or UI changes.
-**It should prove:** Code-level regression coverage preserves speaker-count intent, timestamps, locks, and merge logic; a successful test enables measured real-recording replay.
+**Active work ID:** `OW-SPK-REPLAY-20261029`
+**Next:** [OW-SPK-REPLAY-20261029] Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
+**Why:** User-reported automated test/build success removes the immediate code-level blocker; only a representative audio replay can show whether real participant voices remain distinct and correctly mapped.
+**It should prove:** A real multi-speaker stream captured on the verified AirPods route completes final diarization with appropriate raw/final cluster counts, no destructive inferred cap, and no false application of provisional names. This playback test cannot independently verify live microphone separation.
 
 ## 14. Parking Lot
 
