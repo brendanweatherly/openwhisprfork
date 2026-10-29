@@ -211,49 +211,47 @@ function makeExpectationResolver() {
     );
 }
 
-// System mode: only system audio reaches the diarizer (the mic track is "you"),
-// so every branch must report `cap` as a count of other speakers (total - 1).
-// The no-signal fallback used to return the total itself, which let one remote
-// voice split across two labels.
-test("speaker expectation reports cap as other-speaker count in every system-mode branch", () => {
+// User-entered counts are hard limits; inferred rosters/defaults/live clusters
+// must not erase real final speakers before acoustic clustering can find them.
+test("final speaker caps honor only a selected or persisted speaker count", () => {
   const resolve = makeExpectationResolver();
-
   assert.deepEqual(
     resolve({ sessionConfig: { expectedCount: 3, explicit: true } }),
-    { numSpeakers: 2, cap: 2 },
-    "an explicit count of 3 means 2 other speakers"
+    { cap: 2, countSource: "session" }
   );
   assert.deepEqual(
     resolve({ noteId: NOTE_ID, note: { expected_speaker_count: 4 } }),
-    { numSpeakers: 3, cap: 3 },
-    "a note count outranks a non-explicit session config"
+    { cap: 3, countSource: "saved" }
   );
   assert.deepEqual(
-    resolve({ observedSpeakerIds: new Set(["speaker_0", "speaker_1"]) }),
-    { numSpeakers: 2, cap: 2 },
-    "observed ids are already other-speaker ids"
+    resolve({ noteId: NOTE_ID, note: { expected_speaker_count: 4 },
+      sessionConfig: { expectedCount: 2, explicit: true } }),
+    { cap: 1, countSource: "session" },
+    "the active user-selected count wins over a saved count"
   );
   assert.deepEqual(
-    resolve({}),
-    { numSpeakers: -1, cap: 1 },
-    "the default total of 2 means a single other speaker, not 2"
+    resolve({ sessionConfig: { expectedCount: 2, explicit: false },
+      observedSpeakerIds: new Set(["speaker_0"]) }),
+    { cap: 7, countSource: "auto" },
+    "default count and a single provisional voice do not cap a four-person call"
+  );
+  assert.deepEqual(resolve({}), { cap: 7, countSource: "auto" });
+  assert.deepEqual(
+    resolve({ noteId: NOTE_ID, note: { participants: JSON.stringify(THREE_ATTENDEES) } }),
+    { cap: 7, countSource: "auto" },
+    "the calendar roster is a hint, not a final cap"
   );
 });
 
-// Mic mode (in-person session): the user is one of the diarized voices, so the
-// expected total applies without the -1 the system-mode branches use.
-test("mic mode counts the user among the expected speakers", () => {
+test("mic-mode cap includes the user and respects explicit limits", () => {
   const resolve = makeExpectationResolver();
-
   assert.deepEqual(
     resolve({ sessionConfig: { expectedCount: 3, explicit: true }, diarizedSource: "mic" }),
-    { numSpeakers: 3, cap: 3 },
-    "an explicit total of 3 stays 3, not total - 1"
+    { cap: 3, countSource: "session" }
   );
   assert.deepEqual(
     resolve({ diarizedSource: "mic" }),
-    { numSpeakers: -1, cap: 2 },
-    "the no-signal fallback caps at the default expected total, user included"
+    { cap: 8, countSource: "auto" }
   );
 });
 
