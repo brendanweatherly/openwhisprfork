@@ -48,3 +48,10 @@
 **Still true:** The Oct. 28 baseline branch is preserved; decision 0005 (native speaker auto-discovery and explicit-only final cap) remains **Proposed** until representative audio replay. The automatic-discovery change has not yet been tested against actual multi-speaker Teams audio.
 **Implication:** Advance priority from executing code tests to exercising the modified **meeting capture/post-stop diarization** path. Importing the MP4 alone uses a potentially different upload path and cannot conclusively validate this fix.
 **Priority now:** Run the extracted working branch as a development app, capture a representative portion of the locally available Teams recording over the previously working AirPods output while a meeting note is recording, then compare native cluster count, final count, cap source, speaker names, timestamps, and retained source audio. Keep private meeting data off public GitHub.
+
+## 2026-10-29 - Windows native helper startup blocked by inaccessible C++ compiler
+
+**Direct evidence:** User ran `npm start` from the extracted `fix/meeting-auto-speaker-discovery-20261029` checkout with `OPENWHISPR_CHANNEL=development` and debug logging. The `prestart` step `compile:windows-system-audio-helper` failed: `cl.exe spawnSync cl.exe ENOENT` and `gcc.exe spawnSync gcc.exe ENOENT`. The app did not launch. Node v24.22.1 is installed.
+**Code verified:** `scripts/build-windows-system-audio-helper.js` invokes either MSVC or GCC to compile the fork's modified source into `resources/bin/windows-system-audio-helper.exe`, intentionally rejecting the upstream prebuilt helper, which lacks `--device-id` support.
+**Not invalidated:** User-reported passing speaker regression suite, TypeScript typecheck and renderer build. These do not exercise the native Windows helper. Speaker replay and release validation remain outstanding.
+**Priority now:** Locate installed MSVC via x64 Native Tools Command Prompt for Visual Studio; otherwise install Build Tools with Desktop development with C++, compiler, and Windows SDK. Re-run `npm start` inside the developer environment, inspect any additional prestart errors, then resume real Teams audio replay.
