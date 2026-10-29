@@ -13265,7 +13265,66 @@ class IPCHandlers {
         // irreversibly merge distinct voices before our speaker cap or voting.
         let diarizationSegments = await this.diarizationManager.diarize(tmpWav);
         const nativeAudioClusters = new Set(diarizationSegments.map((seg) => seg.speaker)).size;
-        if (cap != null) {
+        const speakerEmb = require("./speakerEmbeddings");
+        let capStrategy = "not-needed";
+        let capRemaps = [];
+        let capEmbeddingCoverage = 0;
+        if (cap != null && nativeAudioClusters > cap) {
+          // The previous meeting-only duration cap folded every extra voice into
+          // the *longest* speaker. Unlike upload diarization, that merged real
+          // people even when the native engine had separated their voices.
+          // Reuse the tested upload voice-centroid policy before discarding ids.
+          const beforeCap = diarizationSegments;
+          let centroids = new Map();
+          try {
+            if (speakerEmb.isAvailable()) {
+              centroids = await speakerEmb.extractClusterCentroids(tmpWav, beforeCap);
+            }
+          } catch (error) {
+            debugLogger.warn("Meeting speaker cap could not compare voice embeddings", {
+              error: error.message,
+            });
+          }
+          capEmbeddingCoverage = centroids.size;
+          if (centroids.size > 0) {
+            const { capSpeakerClustersByVoice } = require("./diarizationPolicy");
+            diarizationSegments = capSpeakerClustersByVoice(
+              beforeCap,
+              cap,
+              centroids,
+              (a, b) => speakerEmb.cosineSimilarity(a, b)
+            );
+            capStrategy = "voice-similarity";
+          } else {
+            // Explicit counts and the supported auto ceiling still apply, but
+            // never silently pretend this duration fallback is voice-matched.
+            diarizationSegments = this.diarizationManager.capSpeakerClusters(beforeCap, cap);
+            capStrategy = "duration-fallback";
+            debugLogger.warn("Meeting speaker cap fell back to duration-only folding", {
+              countSource,
+              nativeAudioClusters,
+              cap,
+            });
+          }
+          const relabels = new Map();
+          for (let i = 0; i < beforeCap.length; i += 1) {
+            if (beforeCap[i].speaker !== diarizationSegments[i].speaker) {
+              relabels.set(beforeCap[i].speaker, diarizationSegments[i].speaker);
+            }
+          }
+          capRemaps = [...relabels].map(([from, to]) => ({ from, to }));
+          // Cluster ids contain no transcript text or participant identity.
+          debugLogger.info("Post-meeting speaker cap audit", {
+            countSource,
+            capStrategy,
+            nativeAudioClusters,
+            cap,
+            embeddingCoverage: capEmbeddingCoverage,
+            capRemaps,
+          });
+        } else if (cap != null) {
+          // Preserve the existing no-op cap call and count-policy regression
+          // behavior when the native result already fits the ceiling.
           diarizationSegments = this.diarizationManager.capSpeakerClusters(
             diarizationSegments,
             cap
@@ -13295,7 +13354,6 @@ class IPCHandlers {
         const micSingleClusterSoftened = diarizedSource === "mic" && speakerSet.size === 1;
 
         let speakerEmbeddingsMap = null;
-        const speakerEmb = require("./speakerEmbeddings");
         try {
           if (!micSingleClusterSoftened && speakerEmb.isAvailable() && tmpWav) {
             const speakerIds = [...new Set(diarizationSegments.map((s) => s.speaker))];
@@ -13397,6 +13455,9 @@ class IPCHandlers {
           nativeAudioClusters,
           speakerCap: cap,
           speakerCapSource: countSource,
+          capStrategy,
+          capEmbeddingCoverage,
+          capRemapCount: capRemaps.length,
           audioClusters: new Set(diarizationSegments.map((seg) => seg.speaker)).size,
           diarizationTurns: diarizationSegments.length,
           transcriptSegments: enrichedSegments.length,
