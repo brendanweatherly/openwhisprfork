@@ -4,7 +4,7 @@
 **State confidence:** High for pushed code; Medium for live runtime behavior not yet revalidated after all Oct. 28 fixes
 **Current milestone:** Stabilize the meeting capture -> transcription -> diarization -> speaker-correction pipeline on Windows
 **Authoritative pushed branch:** `fix/meeting-speaker-timestamps-20261028`
-**Branch head:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
+**Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
 ## 1. Objective / Definition of Done
@@ -55,7 +55,7 @@ Meeting detection/start
 
 | Component / behavior | Status | Evidence / date / source | Regression watch |
 |---|---|---|---|
-| Fork baseline branch | Confirmed | GitHub: `fix/meeting-speaker-timestamps-20261028` is 72 commits ahead of `main`, 0 behind; head `26e7f918...` | Do not resume work from older speaker branches by accident |
+| Fork baseline branch | Confirmed | GitHub: `fix/meeting-speaker-timestamps-20261028` was 72 commits ahead of `main`, 0 behind at code baseline `26e7f918...`; later commits add project-context docs only | Do not resume work from older speaker branches by accident |
 | Selectable Windows output implementation | Confirmed in code | `docs/windows-selectable-output.md`; helper/device selector changes present on active branch | Full validation checklist still incomplete |
 | AirPods system-audio capture | Confirmed working in live test | 2026-10-28 user test: peak ~26449, RMS ~1667; captured Teams audio audible | Device routing changes / installer build |
 | FxSound system-audio capture | Confirmed broken for tested path | 2026-10-28 user test: peak ~1 / effectively silent | Do not assume all output endpoints behave like AirPods |
