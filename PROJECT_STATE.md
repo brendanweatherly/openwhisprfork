@@ -5,8 +5,8 @@
 **Current milestone:** Validate automatic speaker discovery with a real Teams recording replay
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
-**Active work ID:** `OW-SPK-REPLAY-20261029`
-**Canonical next action:** Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
+**Active work ID:** `OW-WIN-TOOLCHAIN-20261029`
+**Canonical next action:** Enable a Windows C++ compiler in a Developer Command Prompt and relaunch the working-branch app to build the modified audio helper.
 **Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
@@ -79,6 +79,7 @@ Meeting detection/start
 | Technical ASR errors remain, including meaningful wording reversals | Transcription | Invalid scope statements/meeting minutes | Orukeet comparison; Whisper Turbo took ~45 min for 37 min and still reversed a statement |
 | Final speaker-cap folding could merge excess acoustic clusters | Diarization | Residual misattribution | Current `capSpeakerClusters` behavior; observe native/final counts before changing it |
 | Windows clean installer and source-audio retention are not validated end-to-end | Release/reprocessing | Daily use/replay could fail | Existing open acceptance checks |
+| Windows native helper compilation cannot start | Toolchain / startup | Blocks app launch for speaker replay | On Oct. 29 `npm start` failed at `compile:windows-system-audio-helper`: `cl.exe` and `gcc.exe` both returned ENOENT. Source builder requires compiling modified helper; no code regression shown |
 
 ## 6. Observations, Hypotheses, and Unknowns
 
@@ -104,25 +105,25 @@ Meeting detection/start
 
 - Speaker validation requires correctly captured mic/system tracks; AirPods is the known working path, FxSound was silent in the tested path.
 - Speaker reconciliation depends on accurate timestamp alignment and final acoustic clusters; UI renaming is a downstream recovery tool, not a substitute for acoustic correctness.
-- **The implementation is committed and user-reported focused test/typecheck/renderer-build commands completed without errors; independent logs were not provided.** The next dependency is a controlled real-recording replay before any branch promotion.
+- **The implementation is committed and user-reported focused test/typecheck/renderer-build commands completed without errors; independent logs were not provided.** Windows startup is blocked before Electron launches because no C++ compiler is available in the current Command Prompt. Enable MSVC in a Visual Studio developer prompt (or install Build Tools with C++ workload and Windows SDK); do not replace the fork-specific helper with the upstream binary. Real audio replay follows successful startup.
 - Real Teams replay must check native count, capped count, final names, locks, source retention, and completion delivery; do not infer success from a code diff.
 - Summaries and minutes depend on transcript semantics; do not choose a slower ASR model merely for isolated vocabulary improvement.
 
 ## 9. Current Priority Order
 
-1. [OW-SPK-REPLAY-20261029] Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
-2. Compare raw/native and final speaker cluster counts, cap source, incorrect assignments, user locks, and diarization completion against known speech.
-3. If replay shows a regression, isolate whether capture, acoustic clustering, capping, timestamp alignment, or identity reconciliation caused it before changing code.
-4. After a successful replay, assess decision 0005 for acceptance and consider branch promotion while preserving the Oct. 28 baseline.
-5. Fix global rename/re-diarization UX, then address technical ASR semantics, clean installer, and remaining reliability checks.
+1. [OW-WIN-TOOLCHAIN-20261029] Enable a Windows C++ compiler in a Developer Command Prompt and relaunch the working-branch app to build the modified audio helper.
+2. After successful launch, replay a representative section of the known Teams recording through AirPods system output while the fork records a meeting note; leave default speaker count untouched.
+3. Inspect native/final cluster counts, cap source, speaker identity assignments, locks, timestamps, and retained audio; diagnose measured failures before changing clustering.
+4. If replay passes, evaluate proposed decision 0005 and branch promotion, retaining Oct. 28 baseline; test real live mic/system separation independently.
+5. Fix global rename/re-diarization UX and then tackle technical ASR accuracy, installer and other daily-use reliability checks.
 
 ## 10. Current Focus
 
 - Active context: `ACTIVE_CONTEXT.md`
-- Active work ID: `OW-SPK-REPLAY-20261029`
-- Current target: [OW-SPK-REPLAY-20261029] Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
+- Active work ID: `OW-WIN-TOOLCHAIN-20261029`
+- Current target: [OW-WIN-TOOLCHAIN-20261029] Enable a Windows C++ compiler in a Developer Command Prompt and relaunch the working-branch app to build the modified audio helper.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: code and regression tests committed; user reports no errors from focused tests, `npm run typecheck`, or `npm run build:renderer`. Raw logs unavailable; Windows live/recorded replay not yet performed.
+- Current status: user reports focused tests, typecheck and renderer build completed without errors; actual Windows app start failed during prestart because both MSVC `cl.exe` and MinGW `gcc.exe` were unavailable in PATH. No Teams replay yet.
 
 ## 11. Recent Material State Changes
 
@@ -137,6 +138,7 @@ Meeting detection/start
 ## 12. Open Risks / Regression Watchlist
 
 - User reports focused speaker tests, typecheck and renderer build completed with no errors, but test output was not provided; real audio replay is **not validated**.
+- Windows app startup currently stops at native audio-helper build (`cl.exe` and `gcc.exe` ENOENT). Use MSVC Developer Command Prompt or install C++ build tools and Windows SDK; no unsafe upstream helper fallback.
 - `capSpeakerClusters` can fold over-segmented voices into retained clusters; inspect raw and final counts.
 - Preserve user speaker locks, separate mic/system source timestamps, and final speaker delivery.
 - Prevent stale provisional speaker names from overriding final identities.
@@ -146,10 +148,10 @@ Meeting detection/start
 
 ## 13. Next Best Step
 
-**Active work ID:** `OW-SPK-REPLAY-20261029`
-**Next:** [OW-SPK-REPLAY-20261029] Replay the known multi-participant Teams recording through the working-branch Windows capture path and inspect detected speakers, identities, timestamps, and retained audio.
-**Why:** User-reported automated test/build success removes the immediate code-level blocker; only a representative audio replay can show whether real participant voices remain distinct and correctly mapped.
-**It should prove:** A real multi-speaker stream captured on the verified AirPods route completes final diarization with appropriate raw/final cluster counts, no destructive inferred cap, and no false application of provisional names. This playback test cannot independently verify live microphone separation.
+**Active work ID:** `OW-WIN-TOOLCHAIN-20261029`
+**Next:** [OW-WIN-TOOLCHAIN-20261029] Enable a Windows C++ compiler in a Developer Command Prompt and relaunch the working-branch app to build the modified audio helper.
+**Why:** On Oct. 29, `npm start` failed before app launch at `compile:windows-system-audio-helper`; no MSVC or GCC executable was available from the user's ordinary Command Prompt. The fork-specific helper intentionally requires compilation to preserve selected-output capture.
+**It should prove:** `cl` resolves and the custom helper builds to `resources/bin/windows-system-audio-helper.exe`, followed by Electron launching. Do not claim speaker behavior is validated by a successful startup. Resume real Teams playback next.
 
 ## 14. Parking Lot
 
