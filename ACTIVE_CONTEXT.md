@@ -1,62 +1,35 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
 **Last updated:** 2026-10-29
-**Current milestone:** Stabilize final speaker diarization on the Oct. 28 baseline
-**State source:** `PROJECT_STATE.md`
-**Authoritative pushed branch:** `fix/meeting-speaker-timestamps-20261028`
-**Code baseline before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
+**Current milestone:** Validate automatic speaker discovery, then known multi-participant replay
+**Source of truth:** `PROJECT_STATE.md`
+**Baseline:** `fix/meeting-speaker-timestamps-20261028`
+**Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 
-## Current Target
+## Completed in this continuation
 
-Integrate the auto-cluster-before-cap final-diarization behavior into the Oct. 28 branch without losing its newer timestamp, confidence, corrections, selectable-output, or local-only work.
+- Inspected both the active Oct. 28 code and the isolated earlier `codex/raw-speaker-collapse-fix`.
+- Identified two interacting risks: forced native `numSpeakers` and an inferred/default final cluster cap of one remote voice.
+- Patched final meeting diarization to auto-discover native clusters first and only enforce explicit/saved user counts (or supported maximum) afterward.
+- Added before/after cluster counts and cap-source diagnostics.
+- Updated focused speaker-expectation tests for automatic discovery vs explicit limits.
+- Code commit: `c0e30a83`; test commit: `1bf18822`.
 
-## Why This Is Next
+## Verification status
 
-The active branch still forces `numSpeakers` into native final diarization. A real four-participant test collapsed to one cluster, and a separate focused branch demonstrates why forcing native count can merge voices before later logic has a chance to recover them.
+**Code inspected and pushed. Unit tests, typecheck, renderer build, Windows run, and real Teams replay NOT executed.** Do not call the speaker issue resolved based on GitHub writes alone.
 
-Manual speaker UI fixes should not be used to compensate for a bad upstream cluster result.
+## Next action
 
-## Latest Material Evidence
+1. On the working branch, execute `node --import tsx --test test/helpers/meetingSpeakerReconcile.test.js test/helpers/meetingDiarizationEpochTimestamps.test.js test/helpers/diarizationSpeakerMerge.test.js test/helpers/speakerCount.test.js test/helpers/diarizationPolicy.test.js`.
+2. Run `npm run typecheck` and `npm run build:renderer` in a ready local dependency environment; ensure existing tests remain passing.
+3. Replay the same known four-participant Teams recording. Compare the number of remote voices actually heard, `nativeAudioClusters`, `audioClusters`, named/unknown speaker assignments, and whether completion is delivered.
+4. If multiple raw clusters survive but names are wrong, focus on alignment and live-to-final identity reconciliation, not clustering thresholds. If the raw result is a single cluster, investigate input audio and native acoustic model/threshold with isolated evidence.
+5. Confirm user locks, note persistence, AirPods output, and local correction behavior are not regressed.
+6. Only then merge or promote the working branch and update `PROJECT_STATE.md`.
 
-- At the code baseline, the Oct. 28 branch was 72 commits ahead of `main`, 0 behind; later branch commits add only the durable project-context files.
+## Unresolved
 
-- Active `ipcHandlers.js` still calls final diarization with `numSpeakers > 0 ? { numSpeakers } : {}`.
-- Isolated branch `codex/raw-speaker-collapse-fix` commit `6adfb77361c88dd8e0559fb9ce1d884e58d57050` changes this flow to automatic native clustering followed by a speaker-count cap and includes regression coverage.
-- Oct. 28 timing/confidence/stale-name fixes are newer and must be preserved.
-- Real AirPods system capture works; FxSound test path was effectively silent.
-- Orukeet is the current practical local transcription baseline.
-- Whisper Large V3 Turbo took ~45 minutes for a 37-minute recording and still reversed a material scope statement, so it is not the daily default.
-
-## Current Hypothesis or Decision Point
-
-**Leading hypothesis:** forcing native speaker count is still a primary contributor to remote-speaker collapse in final diarization.
-
-**Decision point:** adapt the isolated automatic-clustering logic into the current branch rather than switching development to the older isolated branch.
-
-## Next Action / Test
-
-**Action:** review the current final-diarization block against `6adfb773...`, implement the minimal compatible change in the Oct. 28 branch, then run the focused diarization/timestamp/speaker-state tests.
-
-**Expected proof:** the code no longer forces native cluster count in final meeting diarization; expected speaker count remains a post-clustering ceiling; existing timestamp/user-lock/stale-name protections still pass.
-
-## Regression Checks
-
-- Timestamp normalization/alignment tests
-- Final diarization delivery test/logging
-- User-locked speaker preservation
-- No stale provisional name restoration
-- Conservative live speaker confidence behavior
-- Meeting corrections tests
-- Mic/system source preservation
-- Selectable Windows output behavior unaffected
-
-## Immediate Branches
-
-- **Positive ->** replay the known multi-participant Teams recording and verify distinct remote speakers plus final assignment stability.
-- **Negative ->** inspect whether the newer Oct. 28 reconciliation code requires a different cap point or cluster-renumber strategy.
-- **Inconclusive ->** capture raw diarization intervals and final merge output from the same recording before changing thresholds.
-
-## Blockers / Needed Inputs
-
-- None for code reconciliation/testing in the repository.
-- A real/known Teams recording is required for the subsequent end-to-end validation step.
+- The real recording and Windows execution results are not accessible to this branch's connector-side static inspection.
+- Renaming speakers everywhere and reliable re-run diarization remain separately open.
+- Audio-source retention and installer validation remain incomplete.
