@@ -13119,42 +13119,43 @@ class IPCHandlers {
     }
   }
 
-  _resolveSpeakerExpectation({ sessionConfig, noteId, observedSpeakerIds, diarizedSource }) {
-    // Only a count the user set explicitly outranks the note: participants added
-    // mid-meeting postdate the config snapshot taken at recording start.
-    let expectedTotal = sessionConfig?.explicit ? sessionConfig.expectedCount : null;
+  _resolveSpeakerExpectation({ sessionConfig, noteId, diarizedSource }) {
+    // Only an explicitly selected speaker count is a reliable ceiling. Calendar
+    // rosters can be incomplete and provisional live clusters can undercount, so
+    // neither may destructively limit the final offline diarization.
+    let expectedTotal = sessionConfig?.explicit
+      ? normalizeStoredSpeakerCount(sessionConfig.expectedCount)
+      : null;
+    let countSource = expectedTotal != null ? "session" : "auto";
 
-    if (!expectedTotal && noteId != null) {
+    // The note stores a count when the user operates the speaker stepper; an
+    // untouched default count is not persisted as an explicit user choice.
+    if (expectedTotal == null && noteId != null) {
       try {
-        expectedTotal = this._noteExpectedSpeakerCountOrNull(this.databaseManager.getNote(noteId));
+        const stored = normalizeStoredSpeakerCount(
+          this.databaseManager.getNote(noteId)?.expected_speaker_count
+        );
+        if (stored != null) {
+          expectedTotal = stored;
+          countSource = "saved";
+        }
       } catch (_) {
-        expectedTotal = null;
+        // A missing note must not force the default one-remote-speaker cap.
       }
     }
 
-    // Diarizing the mic track (in-person session) means the user is one of the
-    // diarized voices, so the expected total applies without the -1 the
-    // system-audio branches use.
     const micMode = diarizedSource === "mic";
-
-    if (expectedTotal) {
+    if (expectedTotal != null) {
       const total = Math.min(expectedTotal, MAX_SPEAKER_COUNT);
-      const numSpeakers = micMode ? total : Math.max(1, total - 1);
-      return { numSpeakers, cap: numSpeakers };
+      return { cap: micMode ? total : Math.max(1, total - 1), countSource };
     }
 
-    if (observedSpeakerIds.size >= 2) {
-      const numSpeakers = Math.min(observedSpeakerIds.size, MAX_SPEAKER_COUNT);
-      return { numSpeakers, cap: numSpeakers };
-    }
-
-    if (micMode) {
-      return { numSpeakers: -1, cap: DEFAULT_EXPECTED_SPEAKER_COUNT };
-    }
-
-    // Only system audio reaches the diarizer (the mic track is "you"), so the cap
-    // counts other speakers — same total - 1 basis as the branches above.
-    return { numSpeakers: -1, cap: Math.max(1, DEFAULT_EXPECTED_SPEAKER_COUNT - 1) };
+    // No user-set count: allow automatic native discovery up to the supported
+    // maximum. The system track excludes the user's mic, hence the -1.
+    return {
+      cap: micMode ? MAX_SPEAKER_COUNT : Math.max(1, MAX_SPEAKER_COUNT - 1),
+      countSource: "auto",
+    };
   }
 
   _startOrSkipDiarization(
@@ -13242,10 +13243,9 @@ class IPCHandlers {
       });
     }
 
-    const { numSpeakers, cap } = this._resolveSpeakerExpectation({
+    const { cap, countSource } = this._resolveSpeakerExpectation({
       sessionConfig,
       noteId,
-      observedSpeakerIds,
       diarizedSource,
     });
     // Reserved before the async work so a "record more" started while this runs
@@ -13261,10 +13261,10 @@ class IPCHandlers {
       let tmpWav = null;
       try {
         tmpWav = await this.diarizationManager.convertRawPcmToWav(rawPcmPath, 24000);
-        let diarizationSegments = await this.diarizationManager.diarize(
-          tmpWav,
-          numSpeakers > 0 ? { numSpeakers } : {}
-        );
+        // Always discover clusters first. Forcing a native cluster count can
+        // irreversibly merge distinct voices before our speaker cap or voting.
+        let diarizationSegments = await this.diarizationManager.diarize(tmpWav);
+        const nativeAudioClusters = new Set(diarizationSegments.map((seg) => seg.speaker)).size;
         if (cap != null) {
           diarizationSegments = this.diarizationManager.capSpeakerClusters(
             diarizationSegments,
@@ -13394,6 +13394,9 @@ class IPCHandlers {
 
         debugLogger.info("Post-meeting diarization result delivered", {
           noteId,
+          nativeAudioClusters,
+          speakerCap: cap,
+          speakerCapSource: countSource,
           audioClusters: new Set(diarizationSegments.map((seg) => seg.speaker)).size,
           diarizationTurns: diarizationSegments.length,
           transcriptSegments: enrichedSegments.length,
