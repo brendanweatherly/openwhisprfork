@@ -122,7 +122,7 @@ Meeting detection/start
 - Active work ID: `OW-SPK-VALIDATION-20261029`
 - Current target: [OW-SPK-VALIDATION-20261029] Run focused speaker-regression tests on the working branch.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: code and tests committed; tests **not executed**; replay **not executed**.
+- Current status: code and expanded regression tests committed (`c730772`); full project tests **not executed**; replay **not executed**.
 
 ## 11. Recent Material State Changes
 
@@ -131,7 +131,7 @@ Meeting detection/start
 | Oct. 28 timestamp/confidence/stale-name protection | Focused tests passed earlier | Preserve in the working branch |
 | Orukeet post-decode corrections | Focused tests and a live correction passed earlier | Preserve device-local behavior |
 | Turbo full-video comparison | ~45 min processing for 37 min; material meaning error | Do not replace Orukeet default based on word improvements |
-| Auto-cluster-before-cap + explicit-only final speaker limits | Code commit `c0e30a83`, tests commit `1bf18822` | **Implementation complete; validation pending** |
+| Auto-cluster-before-cap + explicit-only final speaker limits | Code commit `c0e30a83`, tests commits `1bf18822` and `c730772` | **Implementation complete; validation pending** |
 | First v2 pilot state audit | Old current sections conflicted with appended event | Reconciled current sections; event moved to `history/`; decision 0005 created |
 
 ## 12. Open Risks / Regression Watchlist
@@ -164,6 +164,7 @@ Meeting detection/start
 - 2026-10-29: branch/repository reconstruction identified the missing auto-cluster-before-cap integration.
 - 2026-10-29: integration committed on `fix/meeting-auto-speaker-discovery-20261029` and test fixtures added; **neither run nor real replay completed**.
 - 2026-10-29: v2.1 reconciliation moved append-only detail to `history/`, repaired priority/current-focus/next-step alignment, and recorded proposed decision 0005.
+- 2026-10-29: regression tests extended to cover full post-stop four-voice discovery and selected/saved count caps (`c730772`); source inspected, tests still not executed against the repository.
 
 ## 16. Archive / Supporting Context
 
