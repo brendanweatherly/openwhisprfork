@@ -3,7 +3,8 @@
 **Last updated:** 2026-10-29
 **Current milestone:** Stabilize final speaker diarization on the Oct. 28 baseline
 **State source:** `PROJECT_STATE.md`
-**Authoritative pushed branch:** `fix/meeting-speaker-timestamps-20261028` @ `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
+**Authoritative pushed branch:** `fix/meeting-speaker-timestamps-20261028`
+**Code baseline before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 
 ## Current Target
 
@@ -17,8 +18,8 @@ Manual speaker UI fixes should not be used to compensate for a bad upstream clus
 
 ## Latest Material Evidence
 
-- Active Oct. 28 branch is 72 commits ahead of `main`, 0 behind.
-- Branch head: `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`.
+- At the code baseline, the Oct. 28 branch was 72 commits ahead of `main`, 0 behind; later branch commits add only the durable project-context files.
+
 - Active `ipcHandlers.js` still calls final diarization with `numSpeakers > 0 ? { numSpeakers } : {}`.
 - Isolated branch `codex/raw-speaker-collapse-fix` commit `6adfb77361c88dd8e0559fb9ce1d884e58d57050` changes this flow to automatic native clustering followed by a speaker-count cap and includes regression coverage.
 - Oct. 28 timing/confidence/stale-name fixes are newer and must be preserved.
