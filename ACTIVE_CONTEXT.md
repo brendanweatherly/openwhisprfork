@@ -1,6 +1,6 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
-**Last updated:** 2026-10-29 - state consistency repair
+**Last updated:** 2026-10-29 - expanded integration regression coverage
 **Current milestone:** Validate automatic speaker discovery before real-meeting replay
 **Active work ID:** `OW-SPK-VALIDATION-20261029`
 **Canonical next action:** Run focused speaker-regression tests on the working branch.
@@ -20,9 +20,10 @@ The speaker-count implementation has already been committed. The failure exposed
 
 - `c0e30a83`: native final diarization now discovers clusters without a forced count, then applies a cap.
 - `1bf18822`: tests added for user-selected/saved counts and automatic discovery.
+- `c730772`: three additional post-stop integration regression tests committed for four remote speakers, saved cap and explicit live cap. Test file syntax was separately checked; full repository tests remain unexecuted.
 - The untouched default speaker count, incomplete calendar roster, and provisional live labels no longer determine a destructive final cap on this work branch.
 - Count source and pre-/post-cap acoustic cluster counts are now logged.
-- **Code and tests were committed but no test suite, typecheck, renderer build, Windows run, or real Teams replay has yet been executed.**
+- **Code and expanded tests were committed but no repository test suite, typecheck, renderer build, Windows run, or real Teams replay has yet been executed.**
 
 ## Current Hypothesis or Decision Point
 
