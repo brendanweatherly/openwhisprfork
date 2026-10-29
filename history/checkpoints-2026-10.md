@@ -55,3 +55,10 @@
 **Code verified:** `scripts/build-windows-system-audio-helper.js` invokes either MSVC or GCC to compile the fork's modified source into `resources/bin/windows-system-audio-helper.exe`, intentionally rejecting the upstream prebuilt helper, which lacks `--device-id` support.
 **Not invalidated:** User-reported passing speaker regression suite, TypeScript typecheck and renderer build. These do not exercise the native Windows helper. Speaker replay and release validation remain outstanding.
 **Priority now:** Locate installed MSVC via x64 Native Tools Command Prompt for Visual Studio; otherwise install Build Tools with Desktop development with C++, compiler, and Windows SDK. Re-run `npm start` inside the developer environment, inspect any additional prestart errors, then resume real Teams audio replay.
+
+## 2026-10-29 - Working-branch app startup now reported successful
+
+**What changed:** After instructions to make the Microsoft C++ compiler available through an x64 Native Tools Command Prompt, the user replied "ok it works". This is user confirmation that the prior startup obstacle is cleared; successful build/compiler diagnostic logs were not shared.
+**Still true:** The source branch still carries the automatic speaker-discovery changes. Automated tests/typecheck/renderer build were user-reported clean. No representative full meeting capture and final diarization has been verified.
+**Implication:** The missing compiler is no longer the current blocker. Resume the actual multi-speaker recording replay rather than reinstall tools or change acoustic thresholds.
+**Priority now:** Capture 5–10 minutes of the existing Teams MP4 playing through the known-good AirPods endpoint while the development fork records a new meeting note. Keep the initial speaker-count stepper untouched. Inspect native/final cluster counts, cap source, final names/timestamps and retained audio. Do not upload confidential content to the public repo.
