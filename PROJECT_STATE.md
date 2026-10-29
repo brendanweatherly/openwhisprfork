@@ -1,12 +1,12 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
-**Last reconciled:** 2026-10-29
-**State confidence:** High for committed code; user reports focused tests, typecheck, renderer build, and Windows source-app launch succeeded (logs not supplied); unverified in real recording.
-**Current milestone:** Validate automatic speaker discovery with a real Teams recording replay
+**Last reconciled:** 2026-10-29 (after real replay and transcript comparison)
+**State confidence:** Direct evidence for real replay failure (user-supplied diarization log and side-by-side transcript exports); user-reported passing unit tests, typecheck, renderer build, and source-app launch; exact cause of each misattribution still under investigation.
+**Current milestone:** Correct speaker-attribution defects exposed by the real Teams replay
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
-**Active work ID:** `OW-SPK-REPLAY-20261029`
-**Canonical next action:** Capture a multi-speaker Teams video segment through the working-branch meeting recorder and inspect the final speaker clusters, names, timestamps, and logs.
+**Active work ID:** `OW-SPK-QUALITY-20261029`
+**Canonical next action:** Add failing regression coverage for automatic cluster folding and transcript-to-speaker alignment before modifying the meeting diarization logic.
 **Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
@@ -20,6 +20,7 @@ Done means:
 - source audio is retained/recoverable for reprocessing
 - transcription is accurate enough for technical meetings at practical speed
 - speaker diarization produces stable distinct speakers rather than false merges/phantoms
+- when post-meeting diarization is active, a visible progress overlay explains its actual processing stage, elapsed time, and success/failure outcome
 - user speaker assignments/locks survive refinement and "rename everywhere" behaves predictably
 - meeting corrections improve explicit recurring mishearings without corrupting unrelated speech
 - summaries/exports use the corrected, trustworthy transcript
@@ -80,16 +81,24 @@ Meeting detection/start
 | Final speaker-cap folding could merge excess acoustic clusters | Diarization | Residual misattribution | Current `capSpeakerClusters` behavior; observe native/final counts before changing it |
 | Windows clean installer and source-audio retention are not validated end-to-end | Release/reprocessing | Daily use/replay could fail | Existing open acceptance checks |
 | Windows native helper initially failed to compile | Toolchain / startup | Startup had been blocked | On Oct. 29 `cl.exe` and `gcc.exe` were initially missing; user subsequently confirmed app launch works after toolchain guidance. Exact build logs not inspected; Windows installer still not validated |
+| Automatic speaker cap folds distinct acoustic clusters into the longest voice | Final diarization | Can misattribute real speakers | Real replay: 9 raw clusters -> 7 final with `speakerCapSource=auto`; meeting `capSpeakerClusters` indiscriminately folds both extras to the primary cluster |
+| Mixed and fragmented speaker IDs in real transcription | Speaker attribution / transcript alignment | Speaker labels unreliable | Anonymous 4-minute comparison: about 6 actual voices, 7 final labels, one label used on 21/35 transcript segments across multiple people; same real voice also split into several labels |
+| Diarization progress not visible enough | Post-stop UX | User cannot tell what work is running or whether stalled | User explicitly requests a full progress overlay; current transcript shows only a small "finalizing" pill with no stages or elapsed time; Decision 0006 |
 
 ## 6. Observations, Hypotheses, and Unknowns
 
 | Type | Item | Evidence / next proof |
 |---|---|---|
-| Confirmed code change | On working branch native final diarization no longer receives forced `numSpeakers`; count cap follows native discovery | Commits `c0e30a83`, `1bf18822`, `c730772`; user reports test run without errors, detailed output not retained |
-| Hypothesis | Auto clustering plus explicit-only cap will preserve remote speakers better than baseline | Targeted tests then known four-participant replay |
-| Observation | Earlier false speaker labels had multiple causes: clocks, stale names, provisional merge, and native clustering | Do not attribute all errors to one threshold |
-| Unknown | Whether the new cap source policy preserves user locks, note state, source audio, and timestamp mapping in real meetings | Regression tests + replay |
-| Unknown | Whether `rename everywhere` now behaves correctly after final speaker mapping | UI regression test following clustering validation |
+| Confirmed code change | Native final diarization now runs without forcing a fixed cluster count. | Working-branch commit `c0e30a83`, focused tests user-reported clean. This avoided the former single-cluster failure but not identity errors. |
+| Confirmed replay observation | The Oct. 29 replay of a multi-person segment yielded `nativeAudioClusters=9`, `speakerCap=7`, `speakerCapSource=auto`, `audioClusters=7`, `diarizationTurns=36`, `transcriptSegments=35`, and `namedSegments=0` for a fresh note. | User-provided log; diarization completed, but quality failed. |
+| Confirmed transcript comparison | Approx. six distinct real voices occur in the overlapping reference segment, vs seven final placeholder IDs; one ID covers 21/35 transcript chunks and multiple different people. | User-provided text and Teams export; exact voice-to-cluster mapping still unknown without native cluster details. |
+| Confirmed implementation risk | The meeting auto cap still folds surplus clusters into the single longest-duration speaker even when source is `auto`. | `diarization.js` `capSpeakerClusters`, invoked from `ipcHandlers.js` after native auto clustering. The upload path uses a different voice-aware cap. |
+| Confirmed UI gap | Current note transcript shows a small finalizing indicator, not a stage-aware overlay. | `NoteEditor.tsx`, `MeetingTranscriptChat.tsx`; user request captured in Decision 0006. |
+| Observed timing | Comparable utterances align with an approximately 88-second offset because OpenWhispr recorded a later excerpt; no clear cumulative timestamp drift in the sample. | Text alignment across multiple matching passages, not a waveform-level test. |
+| Hypothesis | Incorrect attribution combines native over-segmentation, destructive cap folding, and transcript chunks crossing actual speaker turns. | Require anonymized code tests and raw/retained audio diagnostics before tuning thresholds or changing model. |
+| Unknown | Which of the two folded native clusters contributed to which wrong final label, and how often ASR chunks span speaker boundaries. | Add non-content diagnostic logging for cluster-remap and overlap, then validate with source audio; do not publish private transcripts. |
+| Unknown | Whether reviewed user locks/global rename, separate live mic/system routing, and source-audio retention work end to end. | Regression and separate acceptance tests after acoustic correctness. |
+| Interpretation | `namedSegments=0` confirms no automatic names; it is not evidence of failed acoustic discovery by itself. | Conservative identity policy prioritizes unassigned names over confident wrong names. |
 
 ## 7. Current Decisions
 
@@ -99,31 +108,33 @@ Meeting detection/start
 | `decisions/0002-selectable-windows-output.md` | Accepted | Explicit output device; no silent fallback | Better verified route exists |
 | `decisions/0003-conservative-speaker-identity.md` | Accepted | Unknown beats false labels; user locks win | Real evidence changes tradeoff |
 | `decisions/0004-orukeet-post-decode-corrections.md` | Accepted current behavior | Device-local explicit substitutions | ASR interface changes |
-| `decisions/0005-final-diarization-speaker-count-policy.md` | **Proposed / implemented for validation** | Native auto-discovery, explicit/saved caps only | Tests/replay show regressions |
+| `decisions/0005-final-diarization-speaker-count-policy.md` | **Proposed / real replay failed** | Native auto-discovery trial; automatic maximum still destructively folds 9 to 7 | Revise based on measured identity and cap evidence; do not promote |
+| `decisions/0006-diarization-progress-visibility.md` | **Accepted requirement; implementation pending** | Visible post-stop progress overlay with genuine stage updates and clear terminal states | Only if user changes the requested UX |
 
 ## 8. Dependencies
 
-- Speaker validation requires correctly captured mic/system tracks; AirPods is the known working path, FxSound was silent in the tested path.
-- Speaker reconciliation depends on accurate timestamp alignment and final acoustic clusters; UI renaming is a downstream recovery tool, not a substitute for acoustic correctness.
-- **Implementation, focused test/typecheck/renderer-build results, and successful Windows app launch were reported by the user; underlying command output has not been independently inspected.** The missing-compiler startup blocker appears cleared. The next dependency is a controlled real-audio replay on the working branch, not additional tuning or rebuilding. Keep the fork-specific audio helper and selected-output capture path intact.
-- Real Teams replay must check native count, capped count, final names, locks, source retention, and completion delivery; do not infer success from a code diff.
-- Summaries and minutes depend on transcript semantics; do not choose a slower ASR model merely for isolated vocabulary improvement.
+- Preserve the known-good AirPods audio route, native Windows helper and Orukeet transcription baseline; the replay confirms text is captured and diarization executes, not that live mic/system isolation is fully validated.
+- Fix speaker attribution upstream of global rename UX. A 9-to-7 automatic cap and transcript-chunk alignment can corrupt identities regardless of later manual renaming.
+- The meeting path's duration-only cap differs from the existing voice-similarity-aware cap for uploaded audio. Do not assume the latter can be copied without measuring its embedding/extraction cost, quality and interaction with per-note speaker-index ceilings.
+- The user-supplied side-by-side reference is a **partial** recording starting roughly 88 seconds into the Teams transcript. Compare only overlapping content; Teams speaker identities are useful reference labels, while Teams ASR words are not guaranteed to be perfect.
+- Add a separate post-stop progress overlay while preserving the ability to navigate notes and raw-transcript fallback; full stage progress requires valid IPC events, not invented percentages.
+- No participant names, private meeting words, media, or customer vocabulary from the reference may be committed to the public GitHub repository.
 
 ## 9. Current Priority Order
 
-1. [OW-SPK-REPLAY-20261029] Capture a multi-speaker Teams video segment through the working-branch meeting recorder and inspect the final speaker clusters, names, timestamps, and logs.
-2. Check the source audio is actually recorded through the selected AirPods output and final diarization completes with `speakerCapSource: "auto"` when the default count is untouched.
-3. Compare native and final speaker counts against actual recorded voices, and inspect transcript timestamps, identity suggestions/locks, and retention.
-4. Investigate any measured clustering/name errors before changing diarization policy; if replay succeeds, test live mic/system capture separately and consider promoting proposed decision 0005.
-5. Address global rename/re-diarization UX and then technical ASR accuracy, full installer validation, and daily-use reliability.
+1. [OW-SPK-QUALITY-20261029] Add failing regression coverage for automatic cluster folding and transcript-to-speaker alignment before modifying the meeting diarization logic.
+2. Use those regressions to address destructive auto-cap folding and transcript-voice turn mismatch, then rerun the *same* known recording and compare actual identities before considering policy 0005 accepted.
+3. Implement the requested diarization progress overlay (Decision 0006) with actual stage transitions, elapsed time, persistent per-note job state and error/skip behavior; no fabricated percentages.
+4. Validate speaker mapping/locks, global rename, audio retention, and live mic/system separation; preserve earlier passing timestamp and Orukeet corrections.
+5. Continue technical-ASR accuracy/performance and Windows clean installer validation only after the speaker correctness gate.
 
 ## 10. Current Focus
 
 - Active context: `ACTIVE_CONTEXT.md`
-- Active work ID: `OW-SPK-REPLAY-20261029`
-- Current target: [OW-SPK-REPLAY-20261029] Capture a multi-speaker Teams video segment through the working-branch meeting recorder and inspect the final speaker clusters, names, timestamps, and logs.
+- Active work ID: `OW-SPK-QUALITY-20261029`
+- Current target: [OW-SPK-QUALITY-20261029] Add failing regression coverage for automatic cluster folding and transcript-to-speaker alignment before modifying the meeting diarization logic.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: user reports automated tests/typecheck/renderer build and development app startup succeeded; native helper's earlier toolchain failure appears resolved. Actual Teams recording replay and post-stop speaker correctness remain untested.
+- Current status: Real replay **completed but failed speaker attribution**. The log showed 9 native clusters reduced to 7 with automatic cap, while the text comparison showed mixed and split IDs. No code fix or full diarization progress overlay has been implemented in response yet.
 
 ## 11. Recent Material State Changes
 
@@ -132,26 +143,28 @@ Meeting detection/start
 | Oct. 28 timestamp/confidence/stale-name protection | Focused tests passed earlier | Preserve in the working branch |
 | Orukeet post-decode corrections | Focused tests and a live correction passed earlier | Preserve device-local behavior |
 | Turbo full-video comparison | ~45 min processing for 37 min; material meaning error | Do not replace Orukeet default based on word improvements |
-| Auto-cluster-before-cap + explicit-only final speaker limits | Code commit `c0e30a83`, tests `1bf18822` and `c730772`; user-reported focused tests/build had no errors | **Automated stage user-reported clean; real replay pending** |
+| Auto-cluster-before-cap + explicit/saved-count policy trial | Code commit `c0e30a83`, tests `1bf18822` and `c730772`; user-reported passing checks; replay showed 9 -> 7 automatic cap and mixed identities | **Real-world speaker attribution failed; proposal remains unaccepted** |
 | First v2 pilot state audit | Old current sections conflicted with appended event | Reconciled current sections; event moved to `history/`; decision 0005 created |
+| Visible diarization progress overlay | User-requested requirement, Decision 0006 recorded | **Pending design/implementation**; tiny finalizing pill is insufficient |
 
 ## 12. Open Risks / Regression Watchlist
 
-- User reports focused speaker tests, typecheck and renderer build completed with no errors, but test output was not provided; real audio replay is **not validated**.
-- Windows native audio-helper originally failed because `cl.exe`/`gcc.exe` were missing; the user now reports the source app launches. Treat startup as user-confirmed, not independently log-verified; continue watching selected-output behavior.
-- `capSpeakerClusters` can fold over-segmented voices into retained clusters; inspect raw and final counts.
-- Preserve user speaker locks, separate mic/system source timestamps, and final speaker delivery.
-- Prevent stale provisional speaker names from overriding final identities.
-- Keep local correction vocabulary device-local and outside public source.
-- Protect AirPods capture and explicit Windows output selection without silent device fallback.
-- Preserve old Oct. 28 branch as the known code baseline until validation passes.
+- Real 4-minute excerpt showed six reference voices but seven final speaker IDs, with one ID assigned across several real people; quality is **confirmed broken** despite passing synthetic code tests.
+- `speakerCapSource=auto` still applies a hard seven-cluster ceiling and folds extra native clusters into the dominant cluster; do not promote trial policy 0005.
+- Preserve speaker locks, separate mic/system timestamps, stale-name protection, and completion delivery when adjusting acoustic grouping or segment matching.
+- Word-level transcription and speaker labeling are distinct: speech chunks can straddle two real people. The Teams reference itself is imperfect text; do not call WER proven from a partial excerpt.
+- `namedSegments=0` may be appropriate with no trusted speaker profiles. Do not automatically assign names merely to make this metric nonzero.
+- Diarization progress overlay remains unimplemented; ensure no indefinite spinner on failure/skip and no unsupported percentage claims.
+- Protect known-good AirPods output capture and device-local Orukeet corrections. Keep company/customer transcripts and voice audio out of the public repo.
+- Preserve Oct. 28 working baseline; no new clustering patch has passed live-replay acceptance.
 
 ## 13. Next Best Step
 
-**Active work ID:** `OW-SPK-REPLAY-20261029`
-**Next:** [OW-SPK-REPLAY-20261029] Capture a multi-speaker Teams video segment through the working-branch meeting recorder and inspect the final speaker clusters, names, timestamps, and logs.
-**Why:** The user reports that the previous compiler/startup blocker has been cleared and the working-branch app opens. Representative acoustic input is the missing evidence before accepting the speaker-count policy or changing additional speaker code.
-**It should prove:** A segment containing multiple known voices captured through the AirPods system output reaches post-stop diarization, does not collapse voices under the untouched default speaker count, and produces usable final speaker identities. Playback alone does not establish live mic/system separation.
+**Active work ID:** `OW-SPK-QUALITY-20261029`
+**Next:** [OW-SPK-QUALITY-20261029] Add failing regression coverage for automatic cluster folding and transcript-to-speaker alignment before modifying the meeting diarization logic.
+**Why:** The first real replay provides a reproducible failure that synthetic tests missed: 9 native clusters reduced to 7 by the automatic maximum, plus incorrect final speaker grouping across 35 transcript segments. A controlled regression and alignment audit must precede any acoustic threshold or merge-policy change.
+**It should prove:** Deterministically capture the harmful behavior of duration-only extra-cluster folding and mixed/split final labels in generic fixtures; separate acoustic clustering, cap policy and text-to-voice overlap before selecting a safe fix.
+**After that:** Correct the measured issue, retest the same speaker excerpt, and build the requested diarization progress overlay as a separate UI improvement.
 
 ## 14. Parking Lot
 
