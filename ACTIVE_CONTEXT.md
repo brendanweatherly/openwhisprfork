@@ -1,35 +1,62 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
-**Last updated:** 2026-10-29
-**Current milestone:** Validate automatic speaker discovery, then known multi-participant replay
-**Source of truth:** `PROJECT_STATE.md`
-**Baseline:** `fix/meeting-speaker-timestamps-20261028`
+**Last updated:** 2026-10-29 - state consistency repair
+**Current milestone:** Validate automatic speaker discovery before real-meeting replay
+**Active work ID:** `OW-SPK-VALIDATION-20261029`
+**Canonical next action:** Run focused speaker-regression tests on the working branch.
+**State source:** `PROJECT_STATE.md`
+**Preserved baseline:** `fix/meeting-speaker-timestamps-20261028`
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 
-## Completed in this continuation
+## Current Target
 
-- Inspected both the active Oct. 28 code and the isolated earlier `codex/raw-speaker-collapse-fix`.
-- Identified two interacting risks: forced native `numSpeakers` and an inferred/default final cluster cap of one remote voice.
-- Patched final meeting diarization to auto-discover native clusters first and only enforce explicit/saved user counts (or supported maximum) afterward.
-- Added before/after cluster counts and cap-source diagnostics.
-- Updated focused speaker-expectation tests for automatic discovery vs explicit limits.
-- Code commit: `c0e30a83`; test commit: `1bf18822`.
+[OW-SPK-VALIDATION-20261029] Run focused speaker-regression tests on the working branch.
 
-## Verification status
+## Why This Is Next
 
-**Code inspected and pushed. Unit tests, typecheck, renderer build, Windows run, and real Teams replay NOT executed.** Do not call the speaker issue resolved based on GitHub writes alone.
+The speaker-count implementation has already been committed. The failure exposed in the real four-participant test cannot be declared corrected until focused tests and a representative meeting replay pass. Do not reopen transcription model tuning or rename UI work ahead of upstream validation.
 
-## Next action
+## Latest Material Evidence
 
-1. On the working branch, execute `node --import tsx --test test/helpers/meetingSpeakerReconcile.test.js test/helpers/meetingDiarizationEpochTimestamps.test.js test/helpers/diarizationSpeakerMerge.test.js test/helpers/speakerCount.test.js test/helpers/diarizationPolicy.test.js`.
-2. Run `npm run typecheck` and `npm run build:renderer` in a ready local dependency environment; ensure existing tests remain passing.
-3. Replay the same known four-participant Teams recording. Compare the number of remote voices actually heard, `nativeAudioClusters`, `audioClusters`, named/unknown speaker assignments, and whether completion is delivered.
-4. If multiple raw clusters survive but names are wrong, focus on alignment and live-to-final identity reconciliation, not clustering thresholds. If the raw result is a single cluster, investigate input audio and native acoustic model/threshold with isolated evidence.
-5. Confirm user locks, note persistence, AirPods output, and local correction behavior are not regressed.
-6. Only then merge or promote the working branch and update `PROJECT_STATE.md`.
+- `c0e30a83`: native final diarization now discovers clusters without a forced count, then applies a cap.
+- `1bf18822`: tests added for user-selected/saved counts and automatic discovery.
+- The untouched default speaker count, incomplete calendar roster, and provisional live labels no longer determine a destructive final cap on this work branch.
+- Count source and pre-/post-cap acoustic cluster counts are now logged.
+- **Code and tests were committed but no test suite, typecheck, renderer build, Windows run, or real Teams replay has yet been executed.**
 
-## Unresolved
+## Current Hypothesis or Decision Point
 
-- The real recording and Windows execution results are not accessible to this branch's connector-side static inspection.
-- Renaming speakers everywhere and reliable re-run diarization remain separately open.
-- Audio-source retention and installer validation remain incomplete.
+- Proposed policy: explicit/saved user-selected counts alone form hard final speaker caps; other counts are hints, not proof. See `decisions/0005-final-diarization-speaker-count-policy.md`.
+- Main unknown: whether the implementation preserves distinct remote speakers without over-splitting, cap folding, or violating existing user locks.
+
+## Next Action / Test
+
+**Active work ID:** `OW-SPK-VALIDATION-20261029`
+**Action:** [OW-SPK-VALIDATION-20261029] Run focused speaker-regression tests on the working branch.
+
+Run:
+`node --import tsx --test test/helpers/meetingSpeakerReconcile.test.js test/helpers/meetingDiarizationEpochTimestamps.test.js test/helpers/diarizationSpeakerMerge.test.js test/helpers/speakerCount.test.js test/helpers/diarizationPolicy.test.js`
+
+Then run `npm run typecheck` and `npm run build:renderer`.
+
+**Expected proof:** Targeted tests exercise explicit vs automatic caps and preserve the Oct. 28 timestamp, identity, and merge behavior. These tests are the gate to real-recording validation, not the final proof.
+
+## Regression Checks
+
+- Native vs post-cap cluster counts and cap source.
+- Correct timestamp normalization and final diarization delivery.
+- User speaker locks, reviewed names, and note persistence.
+- No stale live/provisional identities overriding final clusters.
+- Mic/system separation and working AirPods output; no silent selected-device fallback.
+- Device-local Orukeet corrections remain unchanged.
+
+## Immediate Branches
+
+- Positive -> Replay the known four-participant Teams meeting; compare heard voices, raw/final clusters, speaker names, completion delivery, and retained audio.
+- Negative -> Diagnose the specific failed test without weakening unrelated guarantees or changing thresholds speculatively.
+- Inconclusive -> Instrument the relevant stage and preserve the branch as unverified.
+
+## Blockers / Needed Inputs
+
+- Tests require a ready Node/Electron dependency environment; real replay requires the Teams reference recording.
+- No further code change is justified before checking the committed implementation.
