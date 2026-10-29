@@ -40,3 +40,11 @@
 **Still true:** No claims of tests passing or real replay succeeding; the current work branch is unpromoted.
 **Implication:** The current-state and handoff documents now describe the same open work item rather than conflicting old/new activities.
 **Priority now:** Run the recorded test command and report actual evidence.
+
+## 2026-10-29 - Automated speaker checks reported clean; advance to real audio replay
+
+**What changed:** The user reported that the five-file focused speaker regression command, `npm run typecheck`, and `npm run build:renderer` completed on their Windows checkout with **no errors**. This includes the newly committed full post-stop cluster regression fixtures.
+**Evidence level:** User-reported test/build outcome; no raw test summary, counts, build logs, or executable artifacts were inspected by the assistant. Do not misstate this as independently executed/verified.
+**Still true:** The Oct. 28 baseline branch is preserved; decision 0005 (native speaker auto-discovery and explicit-only final cap) remains **Proposed** until representative audio replay. The automatic-discovery change has not yet been tested against actual multi-speaker Teams audio.
+**Implication:** Advance priority from executing code tests to exercising the modified **meeting capture/post-stop diarization** path. Importing the MP4 alone uses a potentially different upload path and cannot conclusively validate this fix.
+**Priority now:** Run the extracted working branch as a development app, capture a representative portion of the locally available Teams recording over the previously working AirPods output while a meeting note is recording, then compare native cluster count, final count, cap source, speaker names, timestamps, and retained source audio. Keep private meeting data off public GitHub.
