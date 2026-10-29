@@ -1,6 +1,6 @@
 # Decision 0005 - Final diarization uses native speaker discovery; only user-set counts limit it
 
-**Status:** Proposed (implemented; regression tests user-reported clean, but October 29 real replay FAILED speaker-attribution acceptance)
+**Status:** Proposed (October 29 first replay failed; voice-aware cap follow-up committed but not yet tested against real audio)
 **Date:** 2026-10-29
 **Decision owner:** OpenWhispr fork project (technical proposal; user approval not inferred)
 **Supersedes:** Previous implicit behavior that allowed defaults, calendar rosters, and provisional live cluster counts to cap final results
@@ -50,6 +50,14 @@ A real Teams playback through the working-branch meeting recorder produced nativ
 The log reported `speakerCapSource: "auto"` and `namedSegments: 0`. A missing assigned name is not by itself a clustering error; mixed and split voices are the failure. Code inspection confirms the meeting path's `capSpeakerClusters` folds all above-cap clusters onto the longest remaining speaker, unlike the voice-similarity-based strategy found in the separate upload pipeline.
 
 The trial avoided the former single-speaker collapse but **did not satisfy** the acoustic-identity acceptance gate. The maximum-cap and transcript-turn alignment policy require diagnosis; do not silently call this proposed decision Accepted. The private transcript and participant names are intentionally not committed.
+
+## Follow-up implementation under validation (2026-10-29)
+
+After the failed replay, the meeting-only cap in `src/helpers/ipcHandlers.js` was changed on the same working branch (commit `8bab551`) to attempt `speakerEmbeddings.extractClusterCentroids` **before** folding clusters, and to use the existing `diarizationPolicy.capSpeakerClustersByVoice` mapping (already used by the upload path) when usable centroids exist. A nine-raw-to-seven-final synthetic end-to-end test was committed (`d95a7ec`) to protect against the former behavior that sent every overflow voice to the primary cluster. Numeric-only diagnostics now distinguish `voice-similarity` from `duration-fallback` and show remapped cluster IDs.
+
+**Evidence:** The isolated pure voice-cap algorithm passed a container test with nine synthetic clusters and known vectors. The full repository regression tests, Windows renderer/typecheck on the updated code, and a second real Teams replay have **not** been executed since these commits.
+
+**Residual risk:** If voice centroids cannot be extracted, the current implementation still falls back to duration-only folding to respect the configured ceiling; this must be clearly logged and addressed if it occurs in real use. Even with embeddings, clustering a real voice more than once or attributing a multi-speaker transcript chunk to one voice can remain incorrect. This patch does not resolve audio retention/re-diarization or the progress overlay.
 
 ## Acceptance gate
 
