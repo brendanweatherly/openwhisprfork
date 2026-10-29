@@ -173,3 +173,17 @@ Meeting detection/start
 - Decisions: `decisions/`
 - Checkpoint history: `history/checkpoints-2026-10.md`
 - Fork design docs: `docs/windows-selectable-output.md`, `docs/local-only-interface.md`, `docs/local-meeting-corrections.md`
+
+## 17. 2026-10-29 - Auto speaker discovery patch (validation pending)
+
+- New work branch: `fix/meeting-auto-speaker-discovery-20261029`, based on the authoritative Oct. 28 branch.
+- Commits: `c0e30a83` changes final-meeting diarization; `1bf18822` updates expectation regression tests.
+- Confirmed code change: native sherpa diarization is now called without forcing `numSpeakers`; count ceilings apply after native cluster discovery.
+- Confirmed code change: an untouched default of 2, incomplete calendar roster, or provisional live speaker count no longer serves as a destructive final count; auto discovery caps at 7 remote/system voices or 8 mic-track voices (supported total maximum of 8).
+- User explicit stepper count and stored `expected_speaker_count` remain hard ceilings; session explicit choice takes precedence over saved value.
+- Added logging: `nativeAudioClusters`, `audioClusters`, `speakerCap`, `speakerCapSource`.
+- Updated tests: `test/helpers/meetingSpeakerReconcile.test.js` now asserts explicit saved/session limits, default auto discovery, incomplete roster behavior, and mic mode.
+- **Validation status:** patch and tests committed, but tests have not yet been executed in a Node/Electron environment; full real-recording validation remains required. Do not represent as proven fixed.
+- Residual risk: `DiarizationManager.capSpeakerClusters` folds extra acoustic clusters into the largest kept cluster; this may still misattribute speech when native clustering over-splits. Revisit only after examining raw/final speaker counts on a known meeting.
+- Preserve the old Oct. 28 branch as baseline until tests and real replay pass.
+
