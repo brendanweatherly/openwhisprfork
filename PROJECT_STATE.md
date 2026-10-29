@@ -109,6 +109,7 @@ Meeting detection/start
 | `decisions/0004-orukeet-post-decode-corrections.md` | Accepted current behavior | Device-local explicit substitutions | ASR interface changes |
 | `decisions/0005-final-diarization-speaker-count-policy.md` | **Proposed / follow-up unvalidated** | Native auto-discovery plus voice-aware overflow remapping committed as a trial; fallback to duration-only if centroids unavailable | Re-evaluate after next actual Teams replay; do not promote prematurely |
 | `decisions/0006-diarization-progress-visibility.md` | **Accepted requirement; implementation pending** | Visible post-stop progress overlay with genuine stage updates and clear terminal states | Only if user changes the requested UX |
+| `decisions/0007-retained-audio-rediarization.md` | **Accepted requirement; implementation pending** | Preserve local mic/system audio and re-run speaker identification from retained audio while protecting original transcript/corrections/locks | Only if user changes the reprocessing workflow requirement |
 
 ## 8. Dependencies
 
