@@ -378,3 +378,120 @@ test("a stopped session's diarization reserves its speaker ids until its result 
   // Landed: narrowed to the two ids the result actually names.
   assert.equal(handlers._resolveMeetingSpeakerIndexBase(NOTE_ID, 0), 4);
 });
+
+
+// Regression for the four-voice Teams collapse: an untouched two-person default
+// and a single provisional live label are hints, not final acoustic constraints.
+// Exercise post-stop diarize -> cap -> merge -> IPC instead of policy in isolation.
+async function runNativeDiscoveryFixture(t, { countIsExplicit, savedCount }) {
+  const { IPCHandlers } = loadHandlers();
+  const DiarizationManager = loadDiarizationManager();
+  const speakerEmbeddings = require("../../src/helpers/speakerEmbeddings");
+  t.mock.method(speakerEmbeddings, "isAvailable", () => false);
+
+  const calls = { diarize: [], caps: [] };
+  const diarizationManager = new DiarizationManager();
+  const actualCap = diarizationManager.capSpeakerClusters.bind(diarizationManager);
+  const fourVoices = [0, 1, 2, 3].map((index) => ({
+    start: index * 5,
+    end: index * 5 + 4,
+    speaker: "speaker_0" + index,
+  }));
+  Object.assign(diarizationManager, {
+    isAvailable: () => true,
+    convertRawPcmToWav: async () => "/nonexistent/ow-auto-speaker-test.wav",
+    diarize: async (...args) => {
+      calls.diarize.push(args);
+      return fourVoices;
+    },
+    capSpeakerClusters: (segments, cap) => {
+      calls.caps.push(cap);
+      return actualCap(segments, cap);
+    },
+  });
+
+  const sent = [];
+  const win = {
+    isDestroyed: () => false,
+    webContents: { send: (channel, payload) => sent.push({ channel, payload }) },
+  };
+  const handlers = Object.assign(Object.create(IPCHandlers.prototype), {
+    _diarizationSpeakerReservations: new Map(),
+    speakerDiarizationEnabled: true,
+    diarizationManager,
+    databaseManager: {
+      getNote: () => ({
+        expected_speaker_count: savedCount ?? null,
+        // An incomplete calendar roster cannot determine who actually speaks.
+        participants: JSON.stringify([{ email: "one@example.com" }]),
+      }),
+      getSpeakerProfiles: () => [],
+      getSpeakerMappings: () => [],
+      getNoteSpeakerEmbeddings: () => [],
+    },
+  });
+  const transcript = fourVoices.map((s, index) => ({
+    id: "voice-" + index,
+    source: "system",
+    timestamp: s.start + 1,
+    text: "utterance " + index,
+    speaker: "speaker_0",
+    speakerName: "Unverified live label",
+  }));
+
+  handlers._startOrSkipDiarization(
+    "speaker-discovery-regression",
+    "/nonexistent/ow-auto-speaker-test.pcm",
+    0,
+    transcript,
+    win,
+    { speaker_0: { displayName: "Unverified live label" } },
+    { enabled: true, expectedCount: 2, explicit: countIsExplicit },
+    NOTE_ID,
+    "system",
+    0
+  );
+
+  for (let i = 0; i < 50 && sent.length === 0; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(sent.length, 1, "final diarization must deliver its result");
+  assert.equal(sent[0].channel, "meeting-diarization-complete");
+  assert.equal(calls.diarize.length, 1);
+  assert.equal(calls.diarize[0].length, 1,
+    "native diarization must not receive a guessed or forced speaker count");
+  assert.deepEqual(sent[0].payload.segments.map((seg) => seg.text),
+    transcript.map((seg) => seg.text),
+    "speaker discovery must preserve transcript content");
+  assert.ok(sent[0].payload.segments.every((seg) => seg.speakerName !== "Unverified live label"),
+    "a provisional live name must not be assigned to final acoustic clusters");
+  return { calls, payload: sent[0].payload };
+}
+
+test("final discovery preserves four remote voices despite a default count of two", async (t) => {
+  const { calls, payload } = await runNativeDiscoveryFixture(t, {
+    countIsExplicit: false,
+    savedCount: null,
+  });
+  assert.deepEqual(calls.caps, [7]);
+  assert.deepEqual(payload.segments.map((seg) => seg.speaker),
+    ["speaker_0", "speaker_1", "speaker_2", "speaker_3"]);
+});
+
+test("a saved user-selected count caps only after native discovery", async (t) => {
+  const { calls, payload } = await runNativeDiscoveryFixture(t, {
+    countIsExplicit: false,
+    savedCount: 3,
+  });
+  assert.deepEqual(calls.caps, [2], "three total speakers allow two remote clusters");
+  assert.equal(new Set(payload.segments.map((seg) => seg.speaker)).size, 2);
+});
+
+test("an explicit live stepper choice overrides a different saved count", async (t) => {
+  const { calls, payload } = await runNativeDiscoveryFixture(t, {
+    countIsExplicit: true,
+    savedCount: 4,
+  });
+  assert.deepEqual(calls.caps, [1], "two total speakers allow one remote cluster");
+  assert.equal(new Set(payload.segments.map((seg) => seg.speaker)).size, 1);
+});
