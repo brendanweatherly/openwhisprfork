@@ -17,6 +17,8 @@ Module._load = function loadWithMocks(request, parent, isMain) {
         getName: () => "test",
         getVersion: () => "0.0.0",
         isPackaged: false,
+        // A not-yet-ready Electron mock must expose the actual app.isReady API.
+        isReady: () => false,
         on: () => {},
       },
       ipcMain: { handle: () => {}, on: () => {}, removeHandler: () => {} },
