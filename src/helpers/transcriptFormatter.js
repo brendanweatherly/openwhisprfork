@@ -2,6 +2,7 @@ const { i18nMain } = require("./i18nMain");
 
 function resolveSpeaker(seg, speakerMappings) {
   if (seg.speakerName && !seg.speakerIsPlaceholder) return seg.speakerName;
+  if (seg.speakerStatus === "unassigned") return i18nMain.t("notes.speaker.unknown");
   if (seg.speaker && speakerMappings[seg.speaker]) return speakerMappings[seg.speaker];
   if (seg.speaker === "you") return i18nMain.t("transcript.speaker.you");
   if (seg.speaker) {
@@ -18,7 +19,10 @@ function resolveSpeaker(seg, speakerMappings) {
 // otherwise absorb the un-named one beside it.
 function speakerKey(seg) {
   const named = seg.speakerName && !seg.speakerIsPlaceholder ? seg.speakerName : "";
-  return [seg.speaker || "", named, seg.speaker ? "" : seg.source || ""].join("\u0000");
+  return [
+    seg.speaker || "", named, seg.speaker ? "" : seg.source || "",
+    seg.speakerStatus === "unassigned" ? "unassigned" : "",
+  ].join("\u0000");
 }
 
 function parseNoteDate(createdAt) {
@@ -73,7 +77,13 @@ function mergeSegments(segments) {
     if (!seg.text?.trim()) continue;
     const ts = seg.timestamp || 0;
     const last = merged[merged.length - 1];
-    if (last && speakerKey(last) === speakerKey(seg) && ts - lastTimestamp < 2) {
+    if (
+      last &&
+      last.speakerStatus !== "unassigned" &&
+      seg.speakerStatus !== "unassigned" &&
+      speakerKey(last) === speakerKey(seg) &&
+      ts - lastTimestamp < 2
+    ) {
       last.text = last.text + " " + seg.text.trim();
       last.endTimestamp = ts;
     } else {
@@ -182,7 +192,9 @@ function formatJson(note, segments, speakerMappings) {
   const untimed = isUntimed(segments);
   const speakersSet = new Set();
   if (!untimed) {
-    for (const seg of merged) speakersSet.add(resolveSpeaker(seg, speakerMappings));
+    for (const seg of merged) {
+      if (seg.speakerStatus !== "unassigned") speakersSet.add(resolveSpeaker(seg, speakerMappings));
+    }
   }
   const lastSeg = merged[merged.length - 1];
 
@@ -198,6 +210,7 @@ function formatJson(note, segments, speakerMappings) {
               ? Math.round(lastSeg.endTimestamp)
               : 0,
         speaker_count: speakersSet.size,
+        unassigned_segment_count: merged.filter((seg) => seg.speakerStatus === "unassigned").length,
         segment_count: merged.length,
       },
       speakers: [...speakersSet],
