@@ -737,7 +737,7 @@ const SegmentRow = memo(function SegmentRow({
     >
       {t("notes.speaker.unknown")}
     </button>
-  ) : hasSpeaker && (
+  ) : hasSpeaker ? (
     <div className="flex items-center gap-1">
       <SpeakerLabel
         speakerId={segment.speaker!}
@@ -761,7 +761,27 @@ const SegmentRow = memo(function SegmentRow({
         />
       )}
     </div>
-  );
+  ) : activeName ? (
+    // Selecting an unknown acoustic line and assigning a name locks the row,
+    // but deliberately does not invent a numbered speaker cluster. The label
+    // must still be visible and selectable for later correction.
+    <button
+      type="button"
+      onClick={() => onToggleSelect?.(segment.id)}
+      disabled={!onToggleSelect}
+      aria-label={activeName}
+      title={t("notes.speaker.assignName")}
+      className={cn(
+        "inline-flex items-center text-[11px] font-medium mb-0.5 px-1.5 py-0.5",
+        "rounded-md border border-border/70",
+        SPEAKER_COLORS[colorIdx],
+        onToggleSelect && "cursor-pointer hover:border-foreground/50",
+        isSelected && "ring-2 ring-primary/60"
+      )}
+    >
+      <span dir="auto">{activeName}</span>
+    </button>
+  ) : null;
 
   return (
     <div
