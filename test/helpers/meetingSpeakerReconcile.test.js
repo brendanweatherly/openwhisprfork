@@ -331,7 +331,11 @@ test("a stopped session's diarization reserves its speaker ids until its result 
   const sent = [];
   const win = {
     isDestroyed: () => false,
-    webContents: { send: (channel, payload) => sent.push({ channel, payload }) },
+    webContents: {
+      send: (channel, payload) => {
+        if (channel === "meeting-diarization-complete") sent.push({ channel, payload });
+      },
+    },
   };
   const handlers = Object.assign(Object.create(IPCHandlers.prototype), {
     _diarizationSpeakerReservations: new Map(),
@@ -415,7 +419,11 @@ async function runNativeDiscoveryFixture(t, { countIsExplicit, savedCount }) {
   const sent = [];
   const win = {
     isDestroyed: () => false,
-    webContents: { send: (channel, payload) => sent.push({ channel, payload }) },
+    webContents: {
+      send: (channel, payload) => {
+        if (channel === "meeting-diarization-complete") sent.push({ channel, payload });
+      },
+    },
   };
   const handlers = Object.assign(Object.create(IPCHandlers.prototype), {
     _diarizationSpeakerReservations: new Map(),
@@ -548,7 +556,11 @@ test("voice-aware meeting cap routes nine raw clusters to matching kept voices, 
   const sent = [];
   const win = {
     isDestroyed: () => false,
-    webContents: { send: (channel, payload) => sent.push({ channel, payload }) },
+    webContents: {
+      send: (channel, payload) => {
+        if (channel === "meeting-diarization-complete") sent.push({ channel, payload });
+      },
+    },
   };
   const handlers = Object.assign(Object.create(IPCHandlers.prototype), {
     _diarizationSpeakerReservations: new Map(),
@@ -640,7 +652,11 @@ test("automatic meeting without voice embeddings leaves overflow speech unassign
   }));
   const win = {
     isDestroyed: () => false,
-    webContents: { send: (channel, payload) => sent.push({ channel, payload }) },
+    webContents: {
+      send: (channel, payload) => {
+        if (channel === "meeting-diarization-complete") sent.push({ channel, payload });
+      },
+    },
   };
   handlers._startOrSkipDiarization(
     "unknown-overflow-session",
