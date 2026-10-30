@@ -36,8 +36,10 @@ const tests = [
   "test/helpers/meetingCorrections.test.js",
   "test/utils/transcriptSpeakerStateBatch.test.js",
   "test/utils/diarizationCompletion.test.js",
+  "test/utils/meetingDiarizationProgress.test.js",
   "test/utils/segmentSpeakerName.test.js",
   "test/utils/transcriptSelfSide.test.js",
+  "test/components/meetingDiarizationProgressOverlay.test.js",
   "test/components/meetingTranscriptChat.test.js",
   "test/components/meetingTranscriptSpeakerPicker.test.js",
 ];
