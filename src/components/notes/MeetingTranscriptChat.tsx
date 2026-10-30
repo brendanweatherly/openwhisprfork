@@ -65,6 +65,9 @@ const getEffectiveSpeakerKey = (
 ): string => {
   const name = resolveSegmentSpeakerName(segment, speakerMappings);
   if (name) return `name:${name.toLowerCase()}`;
+  // Two unrelated acoustic fragments may both be unassigned. Do not visually
+  // group them as one identified remote person.
+  if (segment.speakerStatus === "unassigned") return `unknown:${segment.id}`;
   if (segment.speaker) return `id:${segment.speaker}`;
   return `src:${segment.source}`;
 };
@@ -82,6 +85,8 @@ const getSpeakerStateLabel = (state: TranscriptSpeakerStatus, t: (key: string) =
       return t("notes.speaker.state.provisional");
     case "suggested":
       return t("notes.speaker.state.suggested");
+    case "unassigned":
+      return t("notes.speaker.unknown");
     case "confirmed":
     default:
       return t("notes.speaker.state.confirmed");
@@ -698,6 +703,7 @@ const SegmentRow = memo(function SegmentRow({
   t,
 }: SegmentRowProps) {
   const hasSpeaker = !!segment.speaker;
+  const isUnassigned = segment.speakerStatus === "unassigned" && !hasSpeaker;
   const isOriginallyYou = segment.speaker === "you";
   const isSystemSpeaker = hasSpeaker && !selfSide;
   // Only an in-person mic cluster may be the user: diarization can't tell which
@@ -715,7 +721,23 @@ const SegmentRow = memo(function SegmentRow({
     !isYouSpeakerName(matchedProfile.display_name, t("notes.speaker.you")) &&
     !!onAttachSpeakerEmail;
 
-  const labelElement = hasSpeaker && (
+  const labelElement = isUnassigned ? (
+    <button
+      type="button"
+      onClick={() => onToggleSelect?.(segment.id)}
+      disabled={!onToggleSelect}
+      aria-label={t("notes.speaker.unknown")}
+      title={t("notes.speaker.assignName")}
+      className={cn(
+        "inline-flex items-center text-[11px] font-medium mb-0.5 px-1.5 py-0.5",
+        "rounded-md border border-dashed border-border/70 text-muted-foreground",
+        onToggleSelect && "cursor-pointer hover:border-foreground/50 hover:text-foreground",
+        isSelected && "ring-2 ring-primary/60"
+      )}
+    >
+      {t("notes.speaker.unknown")}
+    </button>
+  ) : hasSpeaker && (
     <div className="flex items-center gap-1">
       <SpeakerLabel
         speakerId={segment.speaker!}
