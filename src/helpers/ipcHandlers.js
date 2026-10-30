@@ -13283,6 +13283,7 @@ class IPCHandlers {
         let capEmbeddingCoverage = 0;
         let confidentPreCapMerges = [];
         let clustersAfterPreCapMerges = nativeAudioClusters;
+        let unassignedNativeClusters = [];
         if (cap != null && nativeAudioClusters > cap) {
           // The previous meeting-only duration cap folded every extra voice into
           // the *longest* speaker. Unlike upload diarization, that merged real
@@ -13300,8 +13301,12 @@ class IPCHandlers {
             });
           }
           capEmbeddingCoverage = centroids.size;
-          if (centroids.size > 0) {
-            const { capSpeakerClustersByVoice } = require("./diarizationPolicy");
+          const autoSystem = countSource === "auto" && diarizedSource === "system";
+          if (centroids.size > 0 || autoSystem) {
+            const {
+              capSpeakerClustersByVoice,
+              capMeetingSpeakersWithUnknown,
+            } = require("./diarizationPolicy");
             let evidenceGrouped = beforeCap;
             if (countSource === "auto" && centroids.size >= 2) {
               // The old cap protected seven *native* clusters even if two of
@@ -13321,15 +13326,30 @@ class IPCHandlers {
             // The existing cap is retained for compatibility, but the
             // high-evidence groups are no longer immune merely because both
             // were initially among the seven longest native clusters.
-            diarizationSegments = clustersAfterPreCapMerges > cap
-              ? capSpeakerClustersByVoice(
-                  evidenceGrouped,
-                  cap,
-                  centroids,
-                  (a, b) => speakerEmb.cosineSimilarity(a, b)
-                )
-              : evidenceGrouped;
-            capStrategy = "voice-similarity";
+            if (clustersAfterPreCapMerges > cap && autoSystem) {
+              // No usable embedding or an unconvincing match must NOT make a
+              // remote person's words inherit somebody else's speaker ID.
+              // This acoustic sentinel becomes an unassigned transcript label.
+              const result = capMeetingSpeakersWithUnknown(
+                evidenceGrouped,
+                cap,
+                centroids,
+                (a, b) => speakerEmb.cosineSimilarity(a, b)
+              );
+              diarizationSegments = result.segments;
+              unassignedNativeClusters = result.unassignedNativeClusters;
+              capStrategy = "confidence-or-unassigned";
+            } else {
+              diarizationSegments = clustersAfterPreCapMerges > cap
+                ? capSpeakerClustersByVoice(
+                    evidenceGrouped,
+                    cap,
+                    centroids,
+                    (a, b) => speakerEmb.cosineSimilarity(a, b)
+                  )
+                : evidenceGrouped;
+              capStrategy = "voice-similarity";
+            }
           } else {
             // Explicit counts and the supported auto ceiling still apply, but
             // never silently pretend this duration fallback is voice-matched.
@@ -13365,6 +13385,7 @@ class IPCHandlers {
             clustersAfterPreCapMerges,
             confidentPreCapMergeCount: confidentPreCapMerges.length,
             confidentPreCapMerges,
+            unassignedNativeClusters,
             missingEmbeddingClusters: summarizeNativeClusters(beforeCap, centroids)
               .filter((cluster) => !cluster.hasEmbedding)
               .map(({ speaker, turns, speechSeconds, longestTurnSeconds }) =>
@@ -13393,7 +13414,12 @@ class IPCHandlers {
           ...summarizeTranscriptOverlap(kept, diarizationSegments, diarizedSource),
         });
 
-        const speakerSet = new Set(diarizationSegments.map((d) => d.speaker));
+        const { UNASSIGNED_ACOUSTIC_SPEAKER } = require("./diarizationPolicy");
+        const speakerSet = new Set(
+          diarizationSegments
+            .map((d) => d.speaker)
+            .filter((speaker) => speaker !== UNASSIGNED_ACOUSTIC_SPEAKER)
+        );
         const speakerRenumber = buildSpeakerRenumber(speakerSet, speakerIndexBase);
         // Narrowed to the ids the result actually names; kept until quit, since the
         // renderer persists them only after this send.
@@ -13412,7 +13438,7 @@ class IPCHandlers {
         let speakerEmbeddingsMap = null;
         try {
           if (!micSingleClusterSoftened && speakerEmb.isAvailable() && tmpWav) {
-            const speakerIds = [...new Set(diarizationSegments.map((s) => s.speaker))];
+            const speakerIds = [...speakerSet];
             speakerEmbeddingsMap = {};
 
             for (const spk of speakerIds) {
@@ -13514,9 +13540,15 @@ class IPCHandlers {
           capStrategy,
           capEmbeddingCoverage,
           capRemapCount: capRemaps.length,
+          unassignedAcousticTurns: diarizationSegments.filter(
+            (seg) => seg.speaker === UNASSIGNED_ACOUSTIC_SPEAKER
+          ).length,
+          unassignedTranscriptSegments: enrichedSegments.filter(
+            (seg) => seg.speakerStatus === "unassigned"
+          ).length,
           confidentPreCapMergeCount: confidentPreCapMerges.length,
           clustersAfterPreCapMerges,
-          audioClusters: new Set(diarizationSegments.map((seg) => seg.speaker)).size,
+          audioClusters: speakerSet.size,
           diarizationTurns: diarizationSegments.length,
           transcriptSegments: enrichedSegments.length,
           namedSegments: enrichedSegments.filter((seg) => !!seg.speakerName).length,
