@@ -1,12 +1,12 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
-**Last reconciled:** 2026-10-30 (unassigned overflow end-to-end source review, UI fixes and regression additions)
-**State confidence:** Third Teams replay established a speaker-attribution failure (17 native clusters, four ungrounded joins, 30/59 mixed transcript windows). Auto-system confidence-or-unassigned fallback, UI, persistence, exports and synthetic regressions are committed. On Oct. 30, 56/56 actual committed pure-JavaScript source tests (grouping, policy, diagnostics, assignment) executed successfully in an isolated V8 harness with a limited Node assertion shim; this is **not** a native Node test run, full regression suite, TypeScript check, renderer build, or real-audio validation. Container git clone remains blocked by github.com DNS; GitHub connector file access works.
+**Last reconciled:** 2026-10-30 (81 GitHub-source checks passed; one-command native Windows gate committed)
+**State confidence:** Third Teams replay directly showed speaker-identity errors (17 native clusters, four unsupported joins, 30/59 multi-cluster transcript chunks). The confidence-or-unassigned source candidate and renderer/persistence/export tests are committed. Current GitHub source and original nine pure-JS test modules executed **81/81 successfully** in an isolated V8 CommonJS/assert shim (not the full suite); a new `npm run verify:meeting-speakers` runs 26 actual Node/tsx test files, TypeScript checking and Vite renderer build in the Windows checkout. Script source and paths were verified with cross-platform mocked success/fail stages, **but the native Node/Electron/React/Windows suite, typecheck, renderer build, and real recording are not yet executed**. Container GitHub DNS is unavailable; GitHub connector works.
 **Current milestone:** Validate the confidence-or-unassigned speaker pipeline across capture, notes and review UI
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
 **Active work ID:** `OW-SPK-UNKNOWN-VALIDATE-20261030`
-**Canonical next action:** Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
+**Canonical next action:** Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
 **Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
@@ -127,7 +127,7 @@ Meeting detection/start
 
 ## 9. Current Priority Order
 
-1. [OW-SPK-UNKNOWN-VALIDATE-20261030] Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
+1. [OW-SPK-UNKNOWN-VALIDATE-20261030] Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
 2. Correct any failed code/fixture tests and preserve all existing timestamp, speaker-lock, output-device and Orukeet behavior.
 3. Only after tests/build are green, compare the same Teams excerpt once; measure incorrect real-person attributions, new unassigned rows and the conservative pre-cap audit without interpreting raw cluster count as accuracy.
 4. Implement the requested visible diarization progress overlay (Decision 0006) and retained-audio re-diarization (Decision 0007) to avoid repeated playback in normal use.
@@ -137,7 +137,7 @@ Meeting detection/start
 
 - Active context: `ACTIVE_CONTEXT.md`
 - Active work ID: `OW-SPK-UNKNOWN-VALIDATE-20261030`
-- Current target: [OW-SPK-UNKNOWN-VALIDATE-20261030] Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
+- Current target: [OW-SPK-UNKNOWN-VALIDATE-20261030] Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
 - Current status: Conservative pre-cap coalescing plus **system-track confidence-or-unassigned overflow** have been committed. The new manual review UI now displays manually named, speakerless locked segments and colors them independently; backend, note and export regression tests are present, including an added nine-native-cluster/no-embedding post-stop case. No complete Windows tests/build or field-accuracy replay after this change has yet been verified.
 
@@ -152,7 +152,8 @@ Meeting detection/start
 | Numeric-only native/centroid/overlap diagnostics | Latest Windows replay emitted all diagnostic events: 17 clusters; remap and overlap totals received | **Diagnostics operating in real app; no content committed** |
 | Aggregated speaker-overlap correction | Code `07cd6ae`, regression `9d031ff`; audit counter `18fec36` and tests `88ed480`, `4e391be` | **Committed; seven isolated Node checks passed, full Windows/regression and real replay not run** |
 | Mutual high-confidence native pre-cap grouping | Pure helper `0b2816f` / `7f6cc24`, eight tests `87e6329` / `af6fd38`; main IPC `160aa0d` | **Candidate committed; 8/8 local synthetic checks passed, not Windows/live-validated; Decision 0008 Proposed** |
-| Confidence-or-unassigned automatic system overflow | Backend sentinel/policy, persistence and exports committed; reviewed named-unknown UI fix `cfaae2f` / `a94bea2`, UI tests `5d9c215` / `9ec6a49` / `53a8e88`, backend nine-cluster test `fa61fd5` | **Source/tests committed; 56/56 matching pure-JS tests passed in isolated V8 harness on Oct. 30; native Node/Windows integration and real replay unverified; Decision 0009 Proposed** |
+| Confidence-or-unassigned automatic system overflow | Backend sentinel/policy, persistence, exports and manual-label UI committed; new regression fixtures for unknown and locked speakers | **Candidate in GitHub; 81/81 pure-JS GitHub-source tests passed in isolated V8, not native Node/Windows/real-world; Decision 0009 Proposed** |
+| One-command local speaker verification | `scripts/verify-meeting-speakers.js` (`60a56bf`) and package script (`9f4a074`); 26 referenced test files exist; success, failure, missing-dependency and Windows cmd paths exercised in mocked runner | **Committed and static/mocked-path validated; NOT yet run in native Windows checkout. No GitHub Actions minutes required** |
 | First v2 pilot state audit | Old current sections conflicted with appended event | Reconciled current sections; event moved to `history/`; decision 0005 created |
 | Visible diarization progress overlay | User-requested requirement, Decision 0006 recorded | **Pending design/implementation**; tiny finalizing pill is insufficient |
 
@@ -163,16 +164,16 @@ Meeting detection/start
 - A previously unsupported cluster may now be shown as Unknown Speaker instead of being misattributed. That is intentionally safer, but can increase manual review and loses automatic linking among separate unknown lines.
 - Explicit/saved count and mic-track overflow continue their prior behavior. Ensure their test expectations are unchanged before broadening policies.
 - A manually assigned unknown line intentionally has no numeric speaker cluster; its user-locked name must remain visible and editable after save/reload, and exports must show it without counting unknown as an identified participant.
-- The Oct. 30 retry ran 56 actual GitHub-sourced pure-JS tests in isolated V8 with a strict-assert shim: all passed. This **does not** exercise Electron IPC, React, TypeScript, native Node/npm, or Windows. Shell GitHub DNS still fails, while the connector can read source. Full Windows regression suite, typecheck/renderer build and real-audio replay after latest commits **remain unexecuted**.
+- Expanded October 30 source-level execution to **81/81 passing pure-JS tests** across nine GitHub source/test suites, using a limited V8 test/assert shim; this **does not** validate Electron IPC, React, TS, Windows or audio. Container `git` cannot resolve github.com. `npm run verify:meeting-speakers` is committed, covers 26 native test files + typecheck + renderer build, and its orchestration paths were tested with mocks; actual native execution and real replay remain unverified.
 - Progress overlay and retained-audio re-diarization remain unimplemented user requirements; user should not be asked for repeated diagnostic replay until the candidate passes the code gate.
 - Preserve the Oct. 28 baseline, selected AirPods output, transcript text, timestamps, user corrections and privacy; no GitHub Actions use.
 
 ## 13. Next Best Step
 
 **Active work ID:** `OW-SPK-UNKNOWN-VALIDATE-20261030`
-**Next:** [OW-SPK-UNKNOWN-VALIDATE-20261030] Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
-**Why:** The previously requested safe unknown-speaker handling has now been implemented across main-process diarization, persistence, review labels and exports. A direct source review caught and corrected the previously invisible label on manually named unknown lines. The meaningful next gate is execution of those regression fixtures in the actual Windows checkout, not another speculative clustering threshold.
-**It should prove:** The new acoustic-policy/IPC regression plus renderer interaction, selection, locked speaker state and export tests pass; TypeScript and Vite build succeed. The current notes and selected output remain unchanged.
+**Next:** [OW-SPK-UNKNOWN-VALIDATE-20261030] Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
+**Why:** The safe unknown-speaker candidate spans backend, persistence, renderer and exports. Pure policy tests pass; the remaining highest-value evidence is **actual** Node/React/TypeScript/renderer execution in the updated Windows checkout, without spending GitHub Actions minutes. A reproducible one-command gate is now committed, replacing the previous list of commands.
+**It should prove:** Native regression checks for speaker grouping, unknown/locked states, timestamp safety, mic/system selection, reviewed speaker labels and exports pass; TypeScript and Vite renderer build succeed. The known-good AirPods capture and Orukeet path remain unchanged.
 **Afterwards:** Perform one matched Teams excerpt comparison if the tests/build pass; retain Decisions 0005, 0008 and 0009 as Proposed until real speaker-attribution evidence supports acceptance.
 
 ## 14. Parking Lot
