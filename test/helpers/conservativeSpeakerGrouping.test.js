@@ -76,3 +76,10 @@ test("non-finite and throwing comparators cannot create unsafe merges", () => {
     0
   );
 });
+
+test("single-turn embedding can disqualify a misleading mutual pair", () => {
+  const segments = [...twoTurns("a", 0), ...twoTurns("b", 20), { speaker: "c", start: 40, end: 50 }];
+  const centroids = new Map([["a", [1, 0]], ["b", [0.96, 0.28]], ["c", [0.99, 0.14]]]);
+  const result = coalesceConfidentSpeakerClusters(segments, centroids, similarity);
+  assert.deepEqual(result.merges, []);
+});
