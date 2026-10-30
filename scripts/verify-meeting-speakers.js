@@ -15,6 +15,7 @@ const { spawnSync } = require("node:child_process");
 const root = path.resolve(__dirname, "..");
 const tests = [
   "test/helpers/conservativeSpeakerGrouping.test.js",
+  "test/helpers/meetingAudioArchive.test.js",
   "test/helpers/diarizationPolicy.test.js",
   "test/helpers/diarizationSpeakerMerge.test.js",
   "test/helpers/meetingSpeakerReconcile.test.js",
