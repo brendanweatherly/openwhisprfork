@@ -9,7 +9,8 @@ const { resolveBinaryPath, gracefulStopProcess } = require("../utils/serverUtils
 const { getModelsDirForService } = require("./modelDirUtils");
 const { convertToWav } = require("./ffmpegUtils");
 const { getSafeTempDir } = require("./safeTempDir");
-const { applyConfirmedSpeaker } = require("./speakerAssignmentPolicy");
+const { applyConfirmedSpeaker, applyUnassignedSpeaker } = require("./speakerAssignmentPolicy");
+const { UNASSIGNED_ACOUSTIC_SPEAKER } = require("./diarizationPolicy");
 const { buildSpeakerRenumber } = require("./speakerIndexBase");
 const sidecarPidFile = require("./sidecarPidFile");
 const {
@@ -467,7 +468,11 @@ class DiarizationManager {
     }
 
     // Renumber clusters (speaker_00 → speaker_0), offset past a resumed note's ids.
-    const speakerSet = new Set(diarizationSegments.map((d) => d.speaker));
+    const speakerSet = new Set(
+      diarizationSegments
+        .filter((d) => d.speaker !== UNASSIGNED_ACOUSTIC_SPEAKER)
+        .map((d) => d.speaker)
+    );
     const speakerMap = buildSpeakerRenumber(speakerSet, speakerIndexBase);
 
     // Mic-mode softening: a single cluster on a mic-only session is the user
@@ -544,7 +549,11 @@ class DiarizationManager {
         // without word timestamps, attributing every word is still uncertain.
         const bestSpeaker = overlapSpeaker ?? nearestSpeaker;
 
-        if (bestSpeaker) {
+        if (bestSpeaker === UNASSIGNED_ACOUSTIC_SPEAKER) {
+          // No acoustic match was defensible. Clear stale live identity but
+          // retain any manually reviewed/locked speaker on this statement.
+          applyUnassignedSpeaker(enriched);
+        } else if (bestSpeaker) {
           // A batch cluster is independent of the live cluster that happened to
           // use the same numeric ID. Preserve user locks, but never carry a
           // provisional/automatic live name (e.g. Dan) to a different voice.
