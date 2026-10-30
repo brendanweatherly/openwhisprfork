@@ -130,3 +130,21 @@
 **Validation level:** Four isolated overlap-selection checks and three isolated diagnostic-summary checks passed under Node 22 in the container. These duplicated the focused logic but were **not** the complete fork tests; Windows regression/typecheck/build and a new benchmark after the code change remain unrun.
 **Remaining:** Evidence-gated grouping among all native IDs (not merely excess beyond seven), absent-centroid conservative treatment, mixed-word-chunk uncertainty, diarization progress overlay (Decision 0006), and retained-source re-diarization (Decision 0007). Decision 0005 remains Proposed; October 28 baseline preserved.
 **Next:** Validate the narrow code patch on Windows and design a non-destructive acoustic grouping policy with regression evidence before asking the user for another manual Teams replay.
+
+## 2026-10-30 - Conservative mutual native-group pre-cap trial
+
+**Project objective preserved:** Correct final diarization of distinct real meeting participants, retaining working Windows AirPods system capture, Orukeet local transcript correction, previously fixed timestamps, manually reviewed speaker locks and confidence safeguards. No private speech was committed.
+
+**Starting evidence:** Third Teams replay had 17 native clusters for considerably fewer real speakers, 7 final labels, 10 remapped groups (4 lacked a voice embedding and were blindly attached), and 30/59 text chunks crossed multiple final acoustic speaker groups. Existing `capSpeakerClustersByVoice` automatically preserved the seven longest native groups even if two belonged to one voice.
+
+**Implemented on isolated working branch:**
+- `0b2816f`: pure `conservativeSpeakerGrouping.js` using existing `LIVE_RECLUSTER_SIMILARITY=0.93` and `BATCH_LABEL_MARGIN=0.10`. Requires a mutual-nearest pair, at least two valid acoustic turns for each candidate, no overlapping speech and one-pass disjoint pairing. Does not merge merely to hit a target count.
+- `87e6329`: seven initial synthetic unit tests for high-confidence pair, ambiguity, no embeddings, overlap, non-finite scores, one-pass behavior and unchanged inputs.
+- `160aa0d`: main meeting path uses this grouping **only for automatic mode** when native clusters exceed the supported cap, before the existing voice-aware cap; logs `confidentPreCapMergeCount`, `confidentPreCapMerges`, `clustersAfterPreCapMerges`. Explicit/saved user counts unchanged.
+- `7f6cc24` and `af6fd38`: further safety correction so single-turn voice embeddings, though ineligible for merging, can veto misleading pair choices; extra regression.
+
+**Validation:** Eight of eight **isolated pure-helper** Node 22 tests passed using local equivalent source and original policy constants. The complete Windows repository suite, typecheck, renderer build and matched real-audio replay are **not run** after these commits. Decision 0008 is Proposed / implemented for validation. Decision 0005 is also still Proposed; three earlier real speaker-quality trials failed.
+
+**Outstanding upstream defect:** The ordinary overflow cap still forcibly joins clusters with no embeddings and may attach weak nearest matches, making false speaker labels. The next design target is a reviewable unassigned/provisional voice state across meeting backend, transcript UI, note persistence and exports, preserving manually locked corrections. Avoid another user MP4 replay until the consolidated candidate is ready.
+
+**Other accepted pending requirements:** Stage-aware diarization progress overlay (Decision 0006) and retained-audio re-diarization (Decision 0007). No GitHub Actions minutes consumed.
