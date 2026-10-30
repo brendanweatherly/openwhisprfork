@@ -178,3 +178,20 @@
 **Interpretation:** This is more meaningful than a manually transcribed algorithm smoke test because it executed the *actual committed source and test bodies*. It is **not** equivalent to `node --test` with Node's own assertions, nor any Electron/React/TypeScript integration, Vite build or Windows audio benchmark. No Github Actions minutes used and no user private recording data accessed for tests.
 
 **Remaining validation gate (unchanged):** Execute the focused native Node/tsx tests, `npm run typecheck` and `npm run build:renderer` in an actual source checkout, then compare speaker accuracy on the same Teams excerpt once if green. Confidence-or-unassigned Decision 0009 remains Proposed; the user-visible progress overlay and retained-audio re-diarization requirements are still pending.
+
+## 2026-10-30 - 81 pure-source tests pass; single-command native Windows gate committed
+
+**Original objective:** A dependable local-first Windows meeting recorder with accurate, reviewable speaker identity and preserved AirPods/system capture, Orukeet, transcript text, manual locks and timestamp corrections. This turn made a measurable validation improvement, not a claim of real audio correctness.
+
+**Actual execution in this environment:** GitHub connector retrieved current production JS code and nine original pure-source regression suites, which were executed with a minimal isolated V8 CommonJS/assert shim. All **81/81 cases passed**: conservative speaker grouping (8), diarization policy (37), native diagnostics (5), speaker assignment/locks (6), meeting correction rules (7), speaker confidence (5), numbering/base (5), mic-vs-system input selection (5), speaker count (3). The prior checkpoint had 56/56. **This was not Node's native test runner or Electron/React/Windows execution.** A container Git clone failed DNS resolution, so no full checkout or `npm ci` was possible.
+
+**Durable GitHub changes:**
+- `60a56bf`: `scripts/verify-meeting-speakers.js` runs **26 existing test files** with `node --import tsx --test --test-concurrency=2`, followed by `npm run typecheck` and `npm run build:renderer`. This explicitly avoids native binary downloads, an app launch, a Teams replay and GitHub Actions.
+- `9f4a074`: `package.json` exposes `npm run verify:meeting-speakers`.
+- Verified all 26 listed test files exist via the connected repository API; checked script syntax and mocked Win32/Linux success paths, fail-fast behavior and missing dependencies. Node 22 in the container supports `--test-concurrency`. These are **launcher source/control checks**, not execution of actual Windows phases.
+
+**Acceptance status:** Automatic system-track confidence-or-unassigned handling (Decision 0009), conservative coalescence (Decision 0008) and speaker policy (Decision 0005) remain **Proposed** because only earlier real meeting trials ran and they failed. Complete native speaker/UI/persistence/export tests, TypeScript/renderer build, and paired Teams speaker accuracy are **NOT VERIFIED**. The stage-aware progress overlay (Decision 0006) and retained-audio re-diarization (Decision 0007) remain accepted but unimplemented.
+
+**Canonical next:** [OW-SPK-UNKNOWN-VALIDATE-20261030] Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
+
+**User effort:** One command replaces the long prior list; source checkout and npm dependencies still must exist on the Windows PC. Do not request the user to replay a meeting before this gate passes. No GitHub Actions minutes used and no private audio/transcripts were committed.
