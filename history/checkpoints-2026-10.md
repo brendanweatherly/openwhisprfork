@@ -113,3 +113,10 @@
 **Test status:** Four equivalent synthetic helper cases passed in isolated Node 22 execution; a complete app regression/build and a replay with these diagnostics have **not** been executed. Older user-reported 69-case suite/typecheck/renderer-build passed **before** this instrumentation.
 **Decision state:** Policy decision 0005 remains Proposed, now with two failed real speaker-accuracy benchmarks. No threshold, count cap, acoustic model or text assignment behavior changed in the new commits. Progress overlay (0006) and retained-audio rerun (0007) remain accepted requirements with implementation pending.
 **Next:** Validate the diagnostic tests in the refreshed Windows checkout and collect one same-clip, numeric-only native/centroid/overlap log to choose the next corrective algorithm change.
+
+## 2026-10-30 - Fresh Windows ZIP missing compiled renderer HTML
+
+**User observation:** After npm dependency installation and starting Electron from a freshly extracted branch, the source app displayed "OpenWhispr Startup Error — HTML file not found", with a path ending in `index.html`. The program did not reach the speaker diagnostic replay.
+**Source confirmation:** `src/helpers/devServerManager.js` resolves to `src/dist/index.html` when not running the Vite development server. `package.json` defines `npm run build:renderer` as `cd src && vite build`; `npm start` invokes download/native preparation but does not build the renderer.
+**Local recovery:** In the same extracted source folder after `npm ci`, run `npm run build:renderer`, verify `dir src\dist\index.html`, and then `npm start`. This is a fresh-checkout setup issue, not evidence of an acoustic diarization regression; the user has not confirmed successful relaunch yet.
+**Long-term developer experience:** Consider a safe first-launch preflight or a documented one-command development setup once the speaker correctness gate is addressed. Preserve the current known-good baseline; no source code changed for this incident.
