@@ -596,3 +596,78 @@ test("voice-aware meeting cap routes nine raw clusters to matching kept voices, 
   assert.ok(result.every((segment) => !segment.speakerName),
     "a provisional live name must not carry over to final acoustic groups");
 });
+
+
+test("automatic meeting without voice embeddings leaves overflow speech unassigned rather than falsely numbered", async (t) => {
+  const { IPCHandlers } = loadHandlers();
+  const DiarizationManager = loadDiarizationManager();
+  const speakerEmbeddings = require("../../src/helpers/speakerEmbeddings");
+  t.mock.method(speakerEmbeddings, "isAvailable", () => false);
+
+  const native = Array.from({ length: 9 }, (_, index) => ({
+    start: index * 5, end: index * 5 + 4,
+    speaker: "speaker_" + String(index).padStart(2, "0"),
+  }));
+  const manager = new DiarizationManager();
+  Object.assign(manager, {
+    isAvailable: () => true,
+    convertRawPcmToWav: async () => "/nonexistent/ow-unknown-overflow.wav",
+    diarize: async () => native,
+    capSpeakerClusters: () => {
+      throw new Error("auto speaker overflow must not force duration-only identities");
+    },
+  });
+  const sent = [];
+  const handlers = Object.assign(Object.create(IPCHandlers.prototype), {
+    _diarizationSpeakerReservations: new Map(),
+    speakerDiarizationEnabled: true,
+    diarizationManager: manager,
+    databaseManager: {
+      getNote: () => ({ expected_speaker_count: null }),
+      getSpeakerProfiles: () => [],
+      getSpeakerMappings: () => [],
+      getNoteSpeakerEmbeddings: () => [],
+    },
+  });
+  const transcript = native.map((segment, index) => ({
+    id: "unknown-test-" + index,
+    source: "system",
+    text: "synthetic phrase " + index,
+    timestamp: segment.start + 0.5,
+    speaker: "speaker_1",
+    speakerName: "Unverified live label",
+    speakerStatus: "provisional",
+  }));
+  const win = {
+    isDestroyed: () => false,
+    webContents: { send: (channel, payload) => sent.push({ channel, payload }) },
+  };
+  handlers._startOrSkipDiarization(
+    "unknown-overflow-session",
+    "/nonexistent/ow-unknown-overflow.pcm",
+    0,
+    transcript,
+    win,
+    null,
+    { enabled: true, expectedCount: 2, explicit: false },
+    NOTE_ID,
+    "system",
+    0
+  );
+
+  for (let i = 0; i < 50 && sent.length === 0; i += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(sent.length, 1, "final diarization must complete");
+  assert.equal(sent[0].channel, "meeting-diarization-complete");
+  const result = sent[0].payload.segments;
+  assert.deepEqual(result.map((segment) => segment.text), transcript.map((segment) => segment.text));
+  assert.deepEqual(result.slice(0, 7).map((segment) => segment.speaker),
+    Array.from({ length: 7 }, (_, i) => "speaker_" + i));
+  for (const segment of result.slice(7)) {
+    assert.equal(segment.speaker, undefined, "no fake eighth or ninth identity");
+    assert.equal(segment.speakerName, undefined, "stale live identity must be cleared");
+    assert.equal(segment.speakerStatus, "unassigned");
+    assert.equal(segment.speakerIsPlaceholder, true);
+  }
+});
