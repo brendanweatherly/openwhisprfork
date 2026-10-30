@@ -1,12 +1,12 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
-**Last reconciled:** 2026-10-30 (user-confirmed native Windows tests, typecheck and renderer build passed)
-**State confidence:** User confirms native Windows `npm run verify:meeting-speakers` completed: 249 tests, 245 passed, 4 skipped, 0 failed; TypeScript check and renderer build passed (1.98s). Vite reported only a non-blocking large-chunk warning. This validates code/build, NOT speaker identity on real Teams audio. Earlier benchmark showed wrong speaker attribution; updated audio behavior remains untested.
-**Current milestone:** Benchmark real-speaker identity on validated Windows build
+**Last reconciled:** 2026-10-30 (accepted stage-aware progress overlay implemented after previous Windows validation)
+**State confidence:** User's previous Windows gate passed 245/249 tests (four skipped, zero failures), typecheck and renderer build; this was BEFORE the newly committed progress-overlay code. Stage-aware main IPC, preload, typed renderer store, note overlay and English labels are now committed, but only the six isolated TS-reducer tests (converted to JS for V8) were executed and passed. New native Windows tests/build, progress-UI interaction, and real Teams speaker-identity accuracy are NOT YET VERIFIED. Original real replay still failed attribution.
+**Current milestone:** Validate end-to-end Teams speaker accuracy and the new progress overlay
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
-**Active work ID:** `OW-SPK-REAL-BENCHMARK-20261030`
-**Canonical next action:** Compare one real Teams excerpt on the now-validated Windows build against its prior reference, checking false speaker joins, splits and unknown labels.
+**Active work ID:** `OW-REAL-PROGRESS-20261030`
+**Canonical next action:** Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
 **Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
@@ -109,7 +109,7 @@ Meeting detection/start
 | `decisions/0003-conservative-speaker-identity.md` | Accepted | Unknown beats false labels; user locks win | Real evidence changes tradeoff |
 | `decisions/0004-orukeet-post-decode-corrections.md` | Accepted current behavior | Device-local explicit substitutions | ASR interface changes |
 | `decisions/0005-final-diarization-speaker-count-policy.md` | **Proposed / real replay failed** | Native auto-discovery and voice-aware overflow remapping executed but did not produce stable real speakers; some clusters lack centroids | Require evidence-driven fix and successful repeat replay before promotion |
-| `decisions/0006-diarization-progress-visibility.md` | **Accepted requirement; implementation pending** | Visible post-stop progress overlay with genuine stage updates and clear terminal states | Only if user changes the requested UX |
+| `decisions/0006-diarization-progress-visibility.md` | **Accepted requirement; code committed, native/live validation pending** | Visible post-stop progress overlay with genuine stage updates and clear terminal states | Only if user changes the requested UX |
 | `decisions/0007-retained-audio-rediarization.md` | **Accepted requirement; implementation pending** | Preserve local mic/system audio and re-run speaker identification from retained audio while protecting original transcript/corrections/locks | Only if user changes the reprocessing workflow requirement |
 | `decisions/0008-mutual-high-confidence-precap-grouping.md` | **Proposed / implemented for validation** | Auto-only mutual-nearest, strong-evidence coalescence before the seven-cluster cap; never force a pair to satisfy a target count | Full tests and matched real Teams evidence show false joins, poor quality or unacceptable latency |
 | `decisions/0009-confidence-or-unassigned-automatic-overflow.md` | **Proposed / implemented for validation** | System-track automatic overflow without a trustworthy voice match becomes an editable unassigned transcript line, not a false existing speaker; locks and transcript words are preserved | Windows/real evidence shows data loss, false identities, manual review failure or another better strategy |
@@ -127,19 +127,19 @@ Meeting detection/start
 
 ## 9. Current Priority Order
 
-1. [OW-SPK-REAL-BENCHMARK-20261030] Compare one real Teams excerpt on the now-validated Windows build against its prior reference, checking false speaker joins, splits and unknown labels.
-2. Correct any failed code/fixture tests and preserve all existing timestamp, speaker-lock, output-device and Orukeet behavior.
-3. Only after tests/build are green, compare the same Teams excerpt once; measure incorrect real-person attributions, new unassigned rows and the conservative pre-cap audit without interpreting raw cluster count as accuracy.
-4. Implement the requested visible diarization progress overlay (Decision 0006) and retained-audio re-diarization (Decision 0007) to avoid repeated playback in normal use.
-5. Finish global rename everywhere, in-person mic-mode uncertainty policy, clean installer/source-audio retention and remaining technical ASR checks.
+1. [OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
+2. Diagnose real false speaker joins/splits against the existing Teams reference; do not promote Decisions 0005/0008/0009 merely because the speaker-count or source tests pass.
+3. Implement retained local mic/system audio and non-destructive post-meeting re-diarization (accepted Decision 0007), preserving user locks, transcript words and source retention choices.
+4. Complete global rename, improve technical ASR correctness and native Windows packaging/device-switch validation while retaining the known-good AirPods/Orukeet path.
+5. Review progress overlay on long and failed runs; address Vite chunk-size/performance warning separately if real startup performance warrants it.
 
 ## 10. Current Focus
 
 - Active context: `ACTIVE_CONTEXT.md`
-- Active work ID: `OW-SPK-REAL-BENCHMARK-20261030`
-- Current target: [OW-SPK-REAL-BENCHMARK-20261030] Compare one real Teams excerpt on the now-validated Windows build against its prior reference, checking false speaker joins, splits and unknown labels.
+- Active work ID: `OW-REAL-PROGRESS-20261030`
+- Current target: [OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: Conservative pre-cap coalescing plus **system-track confidence-or-unassigned overflow** have been committed. The new manual review UI now displays manually named, speakerless locked segments and colors them independently; backend, note and export regression tests are present, including an added nine-native-cluster/no-embedding post-stop case. Native focused Windows tests/typecheck/renderer now passed; real speaker-accuracy replay still pending.
+- Current status: Previous Windows regression/typecheck/renderer gate passed (245 pass, four skipped); new stage-aware main-to-renderer diarization overlay is **committed and isolated reducer logic tested 6/6**, but NEW Windows tests, UI/live stages, and post-change real speaker accuracy are not verified.
 
 ## 11. Recent Material State Changes
 
@@ -155,7 +155,7 @@ Meeting detection/start
 | Confidence-or-unassigned automatic system overflow | Backend sentinel/policy, persistence, exports and manual-label UI committed; new regression fixtures for unknown and locked speakers | **Candidate in GitHub; 81/81 pure-JS GitHub-source tests passed in isolated V8, not native Node/Windows/real-world; Decision 0009 Proposed** |
 | One-command local speaker verification | `scripts/verify-meeting-speakers.js` (`60a56bf`) and package script (`9f4a074`); 26 referenced test files exist; success, failure, missing-dependency and Windows cmd paths exercised in mocked runner | **USER-VERIFIED native Windows PASS: 245 tests passed, 4 skipped, 0 failed, TypeScript and renderer build passed; real-audio result pending. No GitHub Actions** |
 | First v2 pilot state audit | Old current sections conflicted with appended event | Reconciled current sections; event moved to `history/`; decision 0005 created |
-| Visible diarization progress overlay | User-requested requirement, Decision 0006 recorded | **Pending design/implementation**; tiny finalizing pill is insufficient |
+| Visible diarization progress overlay | Main pipeline stage IPC, preload/type bridge, note-scoped store, overlay, English labels and regression fixtures committed | **Accepted requirement implemented for validation; 6/6 isolated reducer cases pass, native Windows/real UI still untested (Decision 0006)** |
 
 ## 12. Open Risks / Regression Watchlist
 
@@ -165,35 +165,13 @@ Meeting detection/start
 - Explicit/saved count and mic-track overflow continue their prior behavior. Ensure their test expectations are unchanged before broadening policies.
 - A manually assigned unknown line intentionally has no numeric speaker cluster; its user-locked name must remain visible and editable after save/reload, and exports must show it without counting unknown as an identified participant.
 - Expanded October 30 source-level execution to **81/81 passing pure-JS tests** across nine GitHub source/test suites, using a limited V8 test/assert shim; this **does not** validate Electron IPC, React, TS, Windows or audio. Container `git` cannot resolve github.com. `npm run verify:meeting-speakers` is committed, covers 26 native test files + typecheck + renderer build, and its orchestration paths were tested with mocks; native code/build verification passed; real replay remains unverified.
-- Progress overlay and retained-audio re-diarization remain unimplemented user requirements; user should not be asked for repeated diagnostic replay until the candidate passes the code gate.
+- Progress overlay is newly committed but must pass updated native Windows tests and a real long/failed diarization check; retained-audio re-diarization (Decision 0007) remains unimplemented and repeated manual replay remains costly.
 - Preserve the Oct. 28 baseline, selected AirPods output, transcript text, timestamps, user corrections and privacy; no GitHub Actions use.
 
 ## 13. Next Best Step
 
-**Active work ID:** `OW-SPK-REAL-BENCHMARK-20261030`
-**Next:** [OW-SPK-REAL-BENCHMARK-20261030] Compare one real Teams excerpt on the now-validated Windows build against its prior reference, checking false speaker joins, splits and unknown labels.
-**Why:** Native Windows focused regressions, TypeScript and renderer build have passed. The remaining highest-value evidence is a matched real Teams recording to determine whether the new speaker identification is genuinely more accurate.
-**It should prove:** Real participants retain stable identities, false speaker joins/splits decrease and unsupported voice fragments become reviewable Unknown Speaker rows without losing transcript words or reviewed locks.
-**Afterwards:** Review matched speaker results against the earlier sample; keep Decisions 0005, 0008 and 0009 Proposed until real speaker attribution supports acceptance.
-
-## 14. Parking Lot
-
-- Evaluate Qwen3-ASR / other practical ASR alternatives only after the speaker baseline is stable.
-- Consider longer-context Orukeet changes if supported without large latency.
-- Installer signing/distribution polish.
-- Additional UI polish unrelated to meeting correctness.
-
-## 15. Recent Checkpoints
-
-- 2026-10-28: capture, corrections, timestamps, confidence, and final speaker delivery changes committed/tested.
-- 2026-10-29: branch/repository reconstruction identified the missing auto-cluster-before-cap integration.
-- 2026-10-29: integration committed on `fix/meeting-auto-speaker-discovery-20261029` and test fixtures added; **neither run nor real replay completed**.
-- 2026-10-29: v2.1 reconciliation moved append-only detail to `history/`, repaired priority/current-focus/next-step alignment, and recorded proposed decision 0005.
-- 2026-10-29: regression tests extended to cover full post-stop four-voice discovery and selected/saved count caps (`c730772`); source inspected, tests still not executed against the repository.
-
-## 16. Archive / Supporting Context
-
-- Active handoff: `ACTIVE_CONTEXT.md`
-- Decisions: `decisions/`
-- Checkpoint history: `history/checkpoints-2026-10.md`
-- Fork design docs: `docs/windows-selectable-output.md`, `docs/local-only-interface.md`, `docs/local-meeting-corrections.md`
+**Active work ID:** `OW-REAL-PROGRESS-20261030`
+**Next:** [OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
+**Why:** The previous code/build validation passed, and the new accepted progress-overlay implementation now needs its own native gate. Speaker accuracy is still the highest-impact missing end-to-end proof; a matched Teams replay should test both actual identity and visible stage transitions in one pass, not separate repeated recordings.
+**Proof:** Updated tests/typecheck/renderer build pass; the overlay follows the correct note and displays real stages/elapsed time; success/skip/failure clear predictably; the speaker transcript identifies real participants more accurately without corrupting words, manual locks or device-local correction.
+**If failed:** Fix the precise Windows/UI or speaker error with matched evidence; preserve the Oct. 28 baseline and Decisions 0005/0008/0009 Proposed. If passed, begin retained-audio re-diarization and broader Windows acceptance testing.
