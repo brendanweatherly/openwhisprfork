@@ -359,3 +359,40 @@ test("epoch-only exports retain elapsed time while relative-only exports remain 
     { speaker: "speaker_1", timestamp: 11, text: "Reply." },
   ], {}), /\[00:00:11\] Speaker 2:/);
 });
+
+
+test("unassigned meeting speech exports as Unknown Speaker without inventing an identity", () => {
+  const note = { title: "Review", created_at: "2026-01-01T00:00:00Z" };
+  const segments = [
+    { source: "system", timestamp: 0, text: "Uncertain words.", speakerStatus: "unassigned" },
+    { source: "system", timestamp: 1, text: "Another unassigned turn.", speakerStatus: "unassigned" },
+    { source: "system", timestamp: 4, text: "Known words.", speaker: "speaker_0" },
+  ];
+  const txt = formatTxt(note, segments, {});
+  assert.match(txt, /\[00:00:00\] Unknown Speaker:\nUncertain words\./);
+  assert.match(txt, /\[00:00:01\] Unknown Speaker:\nAnother unassigned turn\./);
+  assert.doesNotMatch(txt, /Speaker 2:/);
+  const md = formatMd(note, segments, {});
+  assert.match(md, /\*\*Unknown Speaker\*\* `00:00:00`/);
+  const srt = formatSrt(segments, {});
+  assert.match(srt, /Unknown Speaker: Uncertain words\./);
+  const json = JSON.parse(formatJson(note, segments, {}));
+  assert.equal(json.metadata.unassigned_segment_count, 2);
+  assert.equal(json.metadata.speaker_count, 1);
+  assert.deepEqual(json.speakers, ["Speaker 1"]);
+  assert.equal(json.segments[0].speaker, "Unknown Speaker");
+  assert.equal(json.segments[1].speaker, "Unknown Speaker");
+  assert.equal(json.segments[2].speaker, "Speaker 1");
+});
+
+test("manual review of an unknown speaker takes precedence in exported transcript", () => {
+  const note = { title: "Review", created_at: "2026-01-01T00:00:00Z" };
+  const segments = [{
+    source: "system", timestamp: 3, text: "Reviewed sentence.",
+    speakerName: "Reviewed participant", speakerLocked: true, speakerStatus: "locked",
+  }];
+  assert.match(formatTxt(note, segments, {}), /Reviewed participant:\nReviewed sentence/);
+  const json = JSON.parse(formatJson(note, segments, {}));
+  assert.equal(json.metadata.unassigned_segment_count, 0);
+  assert.deepEqual(json.speakers, ["Reviewed participant"]);
+});
