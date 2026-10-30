@@ -1,12 +1,12 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
-**Last reconciled:** 2026-10-30 (after real voice-aware Teams replay and diagnostic code checkpoint)
+**Last reconciled:** 2026-10-30 (fresh Windows diagnostic build now opens; same excerpt replay next)
 **State confidence:** October 30 real Teams replay directly evidenced voice-aware execution and continued misattribution (log plus paired excerpts). User-reported prior focused tests, typecheck and renderer build succeeded; new diagnostics code/test commits are unverified in full Windows app. Four mirrored pure diagnostic tests passed locally, not the full integration suite.
 **Current milestone:** Diagnose native speaker fragmentation and transcript alignment after the October 30 replay
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
 **Active work ID:** `OW-SPK-DIAG-20261030`
-**Canonical next action:** Validate the new speaker diagnostics on Windows, then capture one same-excerpt replay to isolate native fragmentation from transcript alignment.
+**Canonical next action:** Capture the same Teams excerpt in the now-launching diagnostic build and collect native-cluster, remap, transcript-overlap and final-result logs.
 **Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
@@ -84,7 +84,7 @@ Meeting detection/start
 | Voice-aware cap is used but final speaker attribution remains wrong | Native clustering / merging / transcript alignment | Prevents trustworthy meeting minutes | Oct. 30 replay: 14 native -> 7 final, 11/14 centroids, 7 remaps, 39 turns, 43 text chunks; five identifiable real voices still split/merged across labels; cause not yet isolated |
 | Mixed and fragmented speaker IDs in real transcription | Speaker attribution / transcript alignment | Speaker labels unreliable | Anonymous 4-minute comparison: about 6 actual voices, 7 final labels, one label used on 21/35 transcript segments across multiple people; same real voice also split into several labels |
 | Diarization progress not visible enough | Post-stop UX | User cannot tell what work is running or whether stalled | User explicitly requests a full progress overlay; current transcript shows only a small "finalizing" pill with no stages or elapsed time; Decision 0006 |
-| Fresh October 30 checkout missing installed npm dependencies | Windows prestart / sherpa extraction | Blocks launching the diagnostic build | `npm start` downloaded sherpa-onnx v1.13.8 but could not unpack it: `Cannot find module 'unbzip2-stream'`. Both `package.json` and `package-lock.json` already declare this package; local dependency installation (`npm ci`) is the first recovery step. No source or acoustic code defect established. |
+| Fresh October 30 checkout required npm dependencies and a renderer build | Windows startup / packaging workflow | Resolved for current source checkout; could recur on fresh extraction | Missing `unbzip2-stream` during sherpa extraction and missing `src/dist/index.html` prevented startup. Existing lockfile declares package; renderer uses `npm run build:renderer`. User now confirms the app opens; clean-setup UX remains for future improvement. |
 
 ## 6. Observations, Hypotheses, and Unknowns
 
@@ -125,7 +125,7 @@ Meeting detection/start
 
 ## 9. Current Priority Order
 
-1. [OW-SPK-DIAG-20261030] Validate the new speaker diagnostics on Windows, then capture one same-excerpt replay to isolate native fragmentation from transcript alignment.
+1. [OW-SPK-DIAG-20261030] Capture the same Teams excerpt in the now-launching diagnostic build and collect native-cluster, remap, transcript-overlap and final-result logs.
 2. Use the diagnostics to isolate the larger root cause: native over-splitting, absent/low-quality centroids and unconditional seven-cluster folding versus coarse ASR chunk attribution.
 3. Add a narrow, reproducible corrective regression and algorithm change for the demonstrated failure; retest the **same** audio and preserve timestamp/lock regressions.
 4. Implement stage-aware diarization progress overlay (Decision 0006) and retained-audio re-diarization (Decision 0007), avoiding further routine replay burden.
@@ -135,9 +135,9 @@ Meeting detection/start
 
 - Active context: `ACTIVE_CONTEXT.md`
 - Active work ID: `OW-SPK-DIAG-20261030`
-- Current target: [OW-SPK-DIAG-20261030] Validate the new speaker diagnostics on Windows, then capture one same-excerpt replay to isolate native fragmentation from transcript alignment.
+- Current target: [OW-SPK-DIAG-20261030] Capture the same Teams excerpt in the now-launching diagnostic build and collect native-cluster, remap, transcript-overlap and final-result logs.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: **Second real voice-attribution benchmark failed**, despite entering `capStrategy=voice-similarity`. Eleven of fourteen native clusters had voice embeddings, seven were remapped, and final transcript still mixed/split approximately five real voices into seven labels. New numeric-only diagnostics and four test cases committed, pure helper smoke-checked 4/4 locally; full Windows integration and diagnostic replay pending.
+- Current status: **Second real voice-attribution benchmark failed** (voice-similarity used, but people still mixed/split). New numeric-only diagnostics committed and user reports the current Windows app now opens; fresh diagnostic recording and complete suite still unverified.
 
 ## 11. Recent Material State Changes
 
@@ -158,15 +158,15 @@ Meeting detection/start
 - A fixed seven-speaker auto ceiling remains despite incomplete roster and no user-selected count. The raw 14 native clusters include likely over-segmentation; simply removing the cap could create even more phantom identities.
 - Multi-second transcript chunks can contain speech from more than one speaker; single-turn maximum-overlap logic may assign the chunk to the wrong one. New overlap audit measures this without changing assignments.
 - User reports successful previous typecheck/build; diagnostics commits now need focused regression and Windows integration verification. No GitHub Actions usage.
-- The fresh October 30 extracted checkout failed in the sherpa-onnx unpack step because `unbzip2-stream` was not installed locally; `npm ci` should restore it from the existing lockfile. Do not alter repository dependencies or re-download ZIP without an npm install error.
-- Once dependencies were installed and `npm start` proceeded, Electron showed a startup dialog: HTML file not found. Source `devServerManager.js` loads `src/dist/index.html` outside `NODE_ENV=development`, while `npm start`'s prestart does not run the Vite renderer build. In each newly extracted ZIP, run `npm run build:renderer` to create `src/dist/index.html`, then `npm start`; startup not yet user-confirmed after this guidance.
+- Windows fresh-checkout dependency and missing-renderer-HTML startup blockers are now user-confirmed resolved for the current diagnostic checkout. Keep a future clean-install preflight improvement tracked; do not reopen the speaker algorithm on this evidence.
+- Source app expects `src/dist/index.html`; `npm run build:renderer` creates it and `npm start` does not build it automatically. User confirms launch now succeeds. A simplified first-run developer workflow remains open for later.
 - Progress overlay, retained-audio re-diarization, review-lock persistence, and global rename remain separate accepted/unproven behaviors.
 - Preserve the Oct. 28 known-good baseline, AirPods audio output, Orukeet, and private technical corrections. No customer transcription/voice data in public GitHub.
 
 ## 13. Next Best Step
 
 **Active work ID:** `OW-SPK-DIAG-20261030`
-**Next:** [OW-SPK-DIAG-20261030] Validate the new speaker diagnostics on Windows, then capture one same-excerpt replay to isolate native fragmentation from transcript alignment.
+**Next:** [OW-SPK-DIAG-20261030] Capture the same Teams excerpt in the now-launching diagnostic build and collect native-cluster, remap, transcript-overlap and final-result logs.
 **Why:** The second real recording disproved the idea that selecting voice similarity alone fixes speaker identification. The new diagnostics expose raw cluster durations, embeddings missing for each group, per-remap cosine similarity (or explicit unknown), and how many text chunks span multiple acoustic speakers. This prevents further speculative acoustic tuning.
 **It should prove:** First, four pure helper regression cases and the existing focused speaker suite still run on Windows. Second, the next same-clip result reports `Post-meeting native speaker cluster audit`, `Post-meeting speaker cap audit` with `capRemapDiagnostics`, and `Post-meeting transcript-to-speaker overlap audit`, allowing one measured root-cause choice. It is **not** an end-to-end correctness fix yet.
 **Afterwards:** Patch the demonstrated acoustic/overlap defect with a targeted regression, revalidate the source meeting, then implement the requested progress overlay and retained-audio reprocessing.
