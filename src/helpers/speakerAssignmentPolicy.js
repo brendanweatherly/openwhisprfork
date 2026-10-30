@@ -3,6 +3,7 @@ const SPEAKER_STATUS = Object.freeze({
   CONFIRMED: "confirmed",
   SUGGESTED: "suggested",
   LOCKED: "locked",
+  UNASSIGNED: "unassigned",
 });
 
 function canonicalizeSpeakerStatus(status, segment = null) {
@@ -15,6 +16,7 @@ function canonicalizeSpeakerStatus(status, segment = null) {
     case SPEAKER_STATUS.CONFIRMED:
     case SPEAKER_STATUS.SUGGESTED:
     case SPEAKER_STATUS.LOCKED:
+    case SPEAKER_STATUS.UNASSIGNED:
       return status;
     case "user_locked":
       return SPEAKER_STATUS.LOCKED;
@@ -57,6 +59,19 @@ function applyConfirmedSpeaker(segment, patch = {}) {
   return applySpeakerUpdate(segment, patch, SPEAKER_STATUS.CONFIRMED);
 }
 
+// An acoustic group with no trustworthy identity must not inherit a live
+// placeholder, a stale name, or another participant's speaker number. A
+// manually locked row is left intact by applySpeakerUpdate.
+function applyUnassignedSpeaker(segment) {
+  return applySpeakerUpdate(segment, {
+    speaker: undefined,
+    speakerName: undefined,
+    speakerIsPlaceholder: true,
+    suggestedName: undefined,
+    suggestedProfileId: undefined,
+  }, SPEAKER_STATUS.UNASSIGNED);
+}
+
 function applySuggestedSpeaker(segment, patch = {}) {
   if (isSpeakerLocked(segment)) {
     return segment;
@@ -72,5 +87,6 @@ module.exports = {
   canAutoRelabelSpeaker,
   applyProvisionalSpeaker,
   applyConfirmedSpeaker,
+  applyUnassignedSpeaker,
   applySuggestedSpeaker,
 };
