@@ -272,3 +272,13 @@ for (const outcome of ["skipped", "failed"]) {
     assert.ok(progress.every((p) => !("percent" in p)));
   });
 }
+
+test("progress listener failure cannot abort speaker diarization or drop transcript words", async () => {
+  const final = await runMainDiarization([
+    { source: "system", text: "words must survive a detached progress renderer", timestamp: START_MS + 3000 },
+  ], {
+    onProgress: () => { throw new Error("simulated detached UI"); },
+  });
+  assert.equal(final.segments[0].text, "words must survive a detached progress renderer");
+  assert.ok(final.segments.length > 0);
+});
