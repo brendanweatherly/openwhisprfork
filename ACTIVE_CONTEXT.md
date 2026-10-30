@@ -1,30 +1,30 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
-**Last updated:** 2026-10-29 - Windows debug-mode regression failures diagnosed; test harness patched, rerun pending
-**Current milestone:** Validate voice-aware meeting speaker clustering against a real Teams replay
-**Active work ID:** `OW-SPK-CAP-VALIDATE-20261029`
-**Canonical next action:** Re-run focused speaker regression tests without inherited debug logging, inspect any remaining failures, then replay the same Teams excerpt only after the tests pass.
+**Last updated:** 2026-10-30 - user reports clean focused regression rerun; real Teams replay next
+**Current milestone:** Validate voice-aware speaker attribution using the same real Teams recording
+**Active work ID:** `OW-SPK-REPLAY-20261030`
+**Canonical next action:** Confirm the current voice-aware branch builds cleanly, then replay the same Teams excerpt and inspect speaker accuracy plus capStrategy diagnostics.
 **State source:** `PROJECT_STATE.md`
 **Preserved baseline:** `fix/meeting-speaker-timestamps-20261028`
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 
 ## Current Target
 
-[OW-SPK-CAP-VALIDATE-20261029] Re-run focused speaker regression tests without inherited debug logging, inspect any remaining failures, then replay the same Teams excerpt only after the tests pass.
+[OW-SPK-REPLAY-20261030] Confirm the current voice-aware branch builds cleanly, then replay the same Teams excerpt and inspect speaker accuracy plus capStrategy diagnostics.
 
 ## Why This Is Next
 
-The previous multi-person Teams replay failed speaker-quality acceptance, so the working branch now attempts voice-aware remapping for surplus native clusters. The user ran the focused Windows regression suite on the refreshed code: **56 passed, 13 failed (69 total)**. All 13 failed with `TypeError: app.isReady is not a function` because the user's command prompt still had `OPENWHISPR_LOG_LEVEL=debug`, and two unit-test Electron mocks omitted `app.isReady`. Commits `f82e7f5` and `74530ec` now provide `isReady: () => false` in those test-only mocks. No application logic changed. The run must be repeated before concluding that the voice-aware fix is correct.
+The user reports rerunning the focused speaker regression tests and **everything passed** after the previous 13/69 debug-logger mock failures. The exact green test output was not supplied, and the user did not separately confirm `npm run typecheck` or `npm run build:renderer` on the updated source. We should not ask for the same test suite again. The core open uncertainty is whether the candidate voice-aware overflow remapping improves the inaccurate real-world speaker assignments observed in the first Teams comparison. Rebuild and replay the **same** excerpt while recording the new `capStrategy` metrics. No need to tune models or change ASR before this benchmark.
 
 ## Latest Material Evidence
 
-- User's October 29 Windows console output: `npm ci` completed, then `node --import tsx --test` returned **69 tests, 56 passed, 13 failed**. All failure stacks point to `src/helpers/debugLogger.js:58` calling `app.isReady()` on an incomplete test-only Electron app stub. The later build/typecheck commands were not shown as executed after this failure.
-- Test scaffolding corrections: `test/helpers/meetingSpeakerReconcile.test.js` commit `f82e7f5` and `test/helpers/meetingDiarizationEpochTimestamps.test.js` commit `74530ec`. These are committed but **not rerun**. For a quick rerun using the already-extracted same source, change the current Command Prompt to `set OPENWHISPR_LOG_LEVEL=info` before executing the same focused test command; this bypasses debug-file initialization. A refreshed ZIP with the two committed test fixes should also tolerate `debug`.
-- The console log includes older app recordings with `nativeAudioClusters=32` to `audioClusters=7` on one note, and the known `9` to `7` on another. These lack newly added `capStrategy` fields, so **neither proves or disproves** the voice-aware follow-up patch on the refreshed branch.
-- The older runtime portion repeatedly reports PowerShell failure to resolve Windows default microphone. The logger includes the command rather than actionable stderr; track microphone selection/reliability separately before validating dual-track capture.
-- `npm ci` reported 4 dependency advisories (2 low, 1 moderate, 1 critical), not analyzed yet. Do not use `npm audit fix --force` blindly during this speaker regression investigation.
-- Current acoustic candidate: `8bab551` voice-aware overflow remapping and diagnostic log, `d95a7ec` nine-to-seven synthetic end-to-end fixture; real replay **pending**.
-- Baseline timestamps, speaker locks, separate audio routes, and Orukeet corrections remain protected. Accepted pending requirements: visible diarization progress overlay (Decision 0006), rerun speaker identification from retained audio without destroying reviewed transcript (Decision 0007).
+- **2026-10-30 user report:** The focused Windows speaker regression rerun completed with no failures. The prior suite contained 69 tests. This is a user-reported successful test result; raw stdout was not retained in chat and was not independently executed.
+- Prior failure root cause: 13 cases were interrupted by test-only Electron `app.isReady` mocks when `OPENWHISPR_LOG_LEVEL=debug`. Test fixes were committed as `f82e7f5` and `74530ec`; an immediate workaround was to run with `OPENWHISPR_LOG_LEVEL=info`. Do not reopen these tests without new evidence.
+- Candidate acoustic change: `8bab551` attempts voice-aware cluster remapping using `extractClusterCentroids` and the upload-path mapping strategy; nine-to-seven focused fixture `d95a7ec`. **Real audio replay after the change remains unverified.**
+- Previous October 29 Teams test yielded 9 native clusters capped to 7 (`speakerCapSource=auto`) with some voice IDs shared across actual people. An earlier different recording yielded 32 raw clusters capped to 7, indicating possible acoustic over-splitting independently of the cap.
+- Next real test should surface `capStrategy` as `voice-similarity`, `duration-fallback`, or `not-needed`; review `capEmbeddingCoverage` and safe cluster remaps. Record that raw speaker count is not itself a correctness score.
+- Existing AirPods system capture, Orukeet and timestamp protection are the baseline. Previously observed Windows PowerShell default-microphone resolution errors remain separate reliability follow-up.
+- User-requested post-stop progress overlay (Decision 0006) and re-diarization using retained audio (Decision 0007) remain **accepted requirements, implementation pending**.
 
 ## Current Hypothesis or Decision Point
 
@@ -34,19 +34,16 @@ The previous multi-person Teams replay failed speaker-quality acceptance, so the
 
 ## Next Action / Test
 
-**Active work ID:** `OW-SPK-CAP-VALIDATE-20261029`
-**Action:** [OW-SPK-CAP-VALIDATE-20261029] Re-run focused speaker regression tests without inherited debug logging, inspect any remaining failures, then replay the same Teams excerpt only after the tests pass.
+**Active work ID:** `OW-SPK-REPLAY-20261030`
+**Action:** [OW-SPK-REPLAY-20261030] Confirm the current voice-aware branch builds cleanly, then replay the same Teams excerpt and inspect speaker accuracy plus capStrategy diagnostics.
 
-**Fastest check without another download:** Open the same extracted **new-code** folder where the 69-case test ran. In that Command Prompt execute:
+1. On the **same updated-code checkout** that just passed the speaker suite, run `npm run typecheck` and `npm run build:renderer` if not already done. Do not repeat `npm ci` or the already-passing speaker suite.
+2. From **x64 Native Tools Command Prompt** in that folder, set `OPENWHISPR_CHANNEL=development` and `OPENWHISPR_LOG_LEVEL=debug`, then run `npm start`.
+3. Select the known-good AirPods system-audio output, enable speaker diarization, leave the automatic speaker-count control untouched, start a **new** meeting note, then play the **same** previously tested 5–10-minute Teams MP4 section through AirPods. Don't use MP4 import; it follows another pipeline.
+4. Stop, allow final diarization to finish, and compare whether each actual person's speaking turns now have stable labels. Do not rename before inspecting the first results.
+5. In `%APPDATA%\OpenWhispr-development\logs\debug-*.log`, obtain sanitized `Post-meeting speaker cap audit` (if emitted) and `Post-meeting diarization result delivered` entries. Focus on `nativeAudioClusters`, `speakerCapSource`, `capStrategy`, `capEmbeddingCoverage`, `capRemapCount`, `audioClusters` and whether multiple people are still assigned to the same speaker ID. Share no private meeting speech in public GitHub.
 
-```cmd
-set OPENWHISPR_LOG_LEVEL=info
-node --import tsx --test test/helpers/meetingSpeakerReconcile.test.js test/helpers/meetingDiarizationEpochTimestamps.test.js test/helpers/diarizationSpeakerMerge.test.js test/helpers/speakerCount.test.js test/helpers/diarizationPolicy.test.js
-```
-
-This suppresses debug file logging and avoids the defective mock in the currently extracted ZIP. If all 69 pass, run `npm run typecheck` and `npm run build:renderer`, then download the branch containing the test-mock fixes when convenient and perform the same Teams excerpt real replay. If failures remain, inspect their **new** actual assertion messages rather than rerunning with debug. The source folder being tested must contain `d95a7ec` (the nine-to-seven test).
-
-For the real replay, verify the new numeric `Post-meeting speaker cap audit` / `capStrategy` logs exist. The prior logs lacking these fields are from the older code. Preserve private audio/transcripts locally.
+**Acceptance gate:** A clean test/build plus **measurably improved real speaker attribution** versus the original failed clip. A successful synthetic test alone cannot accept Decision 0005.
 
 ## Regression Checks
 
@@ -60,14 +57,16 @@ For the real replay, verify the new numeric `Post-meeting speaker cap audit` / `
 
 ## Immediate Branches
 
-- Tests pass with loglevel `info`: proceed to typecheck/renderer build and repeat the same reference recording using the latest source branch; inspect new capStrategy metrics and stable identities.
-- Tests still fail: identify the newly exposed real assertion/logic errors after the mock blocker is gone; do not assume all 13 are resolved by the fixture correction.
-- Replayed speaker IDs remain mixed: separate native over-splitting (an earlier session showed 32 clusters), overflow remap fallback and transcript-turn alignment, one variable at a time.
-- Mic selection fails on live Teams despite successful system audio: isolate PowerShell default-input resolver and selected device behavior; do not disrupt the known-good AirPods system route.
+- Typecheck/build fails -> isolate compile error before replay; do not assume test success means Electron builds.
+- Replay emits `capStrategy=voice-similarity` and labels improve -> preserve evidence and advance to transcript-speaker boundary defects / progress overlay.
+- Replay emits `duration-fallback` -> investigate embedding model availability, extraction failures and diagnostics; do not count that as voice-aware validation.
+- Replay still fragments or mixes voices -> compare native clusters and speaker-turn overlap; add tests for the measured root cause before changing ASR or thresholds.
+- Mic input resolver fails separately -> diagnose PowerShell device selection without disturbing known-good AirPods system capture.
 
 ## Blockers / Needed Inputs
 
-- Debug-logging Electron mock fixed in the GitHub working branch but not yet user-validated; user can rerun immediately from the existing refreshed checkout with `OPENWHISPR_LOG_LEVEL=info`.
-- Full repository execution unavailable in current cloud container (GitHub DNS resolution failure); no GitHub Actions minutes consumed.
-- Keep meeting audio/transcripts and customer details private and off public GitHub. Real replay, progress overlay and retained-audio reprocessing remain unverified.
+- **No test-harness blocker currently reported:** User says focused tests now pass.
+- Typecheck and renderer build on the new branch were not separately confirmed by the user.
+- A new real Teams replay using the code with `capStrategy` diagnostics is still needed; previous recordings used the older cap logic.
+- Full repository test execution is not available from this chat runtime; no GitHub Actions minutes should be consumed. Preserve customer audio and names privately.
 
