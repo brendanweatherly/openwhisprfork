@@ -500,16 +500,21 @@ class DiarizationManager {
         const segStart = seg.timestamp;
         const segEnd = nextTimestampAt(index, diarizedSource) ?? segStart + 2.5;
         const midpoint = segStart + (segEnd - segStart) / 2;
-        let overlapSpeaker = null;
         let nearestSpeaker = null;
-        let bestOverlap = 0;
         let bestDistance = Number.POSITIVE_INFINITY;
+        // Sherpa frequently splits one real voice into several adjacent turns.
+        // The old rule selected the SINGLE largest overlapping turn, even when
+        // another speaker owned more of the ASR chunk in aggregate. Score all
+        // acoustic turns belonging to each final speaker in this text window.
+        const overlapBySpeaker = new Map();
 
         for (const dSeg of diarizationSegments) {
           const overlap = Math.min(segEnd, dSeg.end) - Math.max(segStart, dSeg.start);
-          if (overlap > bestOverlap) {
-            bestOverlap = overlap;
-            overlapSpeaker = dSeg.speaker;
+          if (overlap > 0) {
+            overlapBySpeaker.set(
+              dSeg.speaker,
+              (overlapBySpeaker.get(dSeg.speaker) || 0) + overlap
+            );
           }
 
           const distance =
@@ -525,8 +530,18 @@ class DiarizationManager {
           }
         }
 
-        // Tracked separately so the between-clusters fallback compares every
-        // distance instead of latching onto the first cluster it sees.
+        let overlapSpeaker = null;
+        let bestOverlap = 0;
+        for (const [speaker, totalOverlap] of overlapBySpeaker) {
+          if (totalOverlap > bestOverlap) {
+            bestOverlap = totalOverlap;
+            overlapSpeaker = speaker;
+          }
+        }
+
+        // Between acoustic turns, keep the proven nearest-turn fallback.
+        // This does not solve text chunks containing words from two people:
+        // without word timestamps, attributing every word is still uncertain.
         const bestSpeaker = overlapSpeaker ?? nearestSpeaker;
 
         if (bestSpeaker) {
