@@ -520,6 +520,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     "diarization-download-progress",
     (callback) => (_event, data) => callback(data)
   ),
+  onMeetingDiarizationProgress: registerListener(
+    "meeting-diarization-progress",
+    (callback) => (_event, data) => callback(data)
+  ),
   onMeetingDiarizationComplete: registerListener(
     "meeting-diarization-complete",
     (callback) => (_event, data) => callback(data)
