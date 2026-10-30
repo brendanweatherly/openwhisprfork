@@ -3809,7 +3809,21 @@
         "incAria": "Increase expected speaker count",
         "decAria": "Decrease expected speaker count"
       },
-      "consentNotice": "Always get consent when recording others"
+      "consentNotice": "Always get consent when recording others",
+      "diarizationProgress": {
+        "title": "Identifying speakers",
+        "steps": "Speaker identification stages",
+        "preparing": "Preparing recorded audio",
+        "clustering": "Finding distinct voices",
+        "matching": "Matching speakers to transcript",
+        "saving": "Saving final speaker labels",
+        "elapsed": "Elapsed time: {{duration}}",
+        "complete": "Speaker identification complete",
+        "skipped": "Speaker identification skipped",
+        "failed": "Speaker identification could not finish",
+        "failureDescription": "The recorded transcript is still available. Speaker labels may need manual review.",
+        "dismiss": "Close"
+      }
     },
     "overview": {
       "subtitle": {
