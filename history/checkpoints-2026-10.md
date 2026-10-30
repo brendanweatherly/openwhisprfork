@@ -148,3 +148,21 @@
 **Outstanding upstream defect:** The ordinary overflow cap still forcibly joins clusters with no embeddings and may attach weak nearest matches, making false speaker labels. The next design target is a reviewable unassigned/provisional voice state across meeting backend, transcript UI, note persistence and exports, preserving manually locked corrections. Avoid another user MP4 replay until the consolidated candidate is ready.
 
 **Other accepted pending requirements:** Stage-aware diarization progress overlay (Decision 0006) and retained-audio re-diarization (Decision 0007). No GitHub Actions minutes consumed.
+
+## 2026-10-30 - Unknown speaker end-to-end review, fixed manual label rendering, prepare code validation
+
+**Reason for checkpoint:** User requested continued implementation instead of further wait/status reminders. Active objective remains accurate real-world speaker diarization with conservative review, not a guessed target count or an unproven model change.
+
+**Pre-existing candidate found in working branch:** Since the previous checkpoint, source commits `cb97ea63`, `a64827b1`, `a6fab688`, `6f57fa6c`, `f2fa1c49`, `ee66e04f`, and `d3037d30` had added a system-auto confidence-or-unassigned fallback, transcript conversion, lock-safe state round trip, selectable unknown label and export support. Five associated synthetic/integration fixtures (`3507482f`, `d615f0f`, `a6b69fa9`, `ee35c565`, `2ca483cf`) were committed. **Their presence in GitHub does not prove tests were executed or real audio is correct.**
+
+**Specific gap discovered and fixed:** In `MeetingTranscriptChat.tsx`, manually selecting an unassigned line and assigning its name stored `speakerName` and a user lock while deliberately leaving `speaker:undefined`. The renderer only displayed a name chip for an unknown status or a numeric speaker ID, so a valid manually reviewed name was invisible. Commit `cfaae2f8` displays a locked speakerless name and lets the user select it again for correction; `a94bea2d` uses reviewed names as independent color keys so distinct people do not appear identical. Regression fixtures: `5d9c215` (SSR unknown/named labels), `9ec6a49` (DOM re-selection), and `53a8e88` (distinct remote colors).
+  
+**Backend protection added:** `fa61fd5` adds an integration regression for automatic system audio with nine native acoustic groups, no available speaker embeddings, seven retained numbered labels and two unassigned overflow rows. It asserts transcript text preservation, no false numeric identities, stale provisional names cleared, and `speakerStatus="unassigned"`.
+
+**New technical decision:** `decisions/0009-confidence-or-unassigned-automatic-overflow.md` is **Proposed / implemented for validation**. It extends accepted conservative identity principle 0003 and proposed native policies 0005/0008. It does not alter the explicitly selected/saved cap or mic-auto fallback. Overlay 0006 and retained-audio re-diarization 0007 remain accepted requests, not implemented.
+
+**Validation boundaries:** The full Windows source regression suite, TypeScript check, renderer build and same-excerpt Teams replay have **not** been performed after these new changes. Container network cannot reach GitHub for a full clone. No GitHub Actions minutes consumed, and no actual private meeting content or names written to the public repo.
+
+**Next canonical action:** [OW-SPK-UNKNOWN-VALIDATE-20261030] Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
+
+**If tests pass:** Compare the same Teams excerpt once and judge false speaker attribution, not just raw cluster counts; retain all proposed decision statuses until the actual recording improves. If tests fail, fix concrete assertions before retuning thresholds.
