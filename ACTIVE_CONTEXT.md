@@ -1,16 +1,16 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
-**Last updated:** 2026-10-30 - unknown-speaker pipeline reviewed and manual-name rendering fixed; test/build validation next
+**Last updated:** 2026-10-30 - expanded pure tests to 81/81; one-command native Windows validation committed
 **Current milestone:** Validate the confidence-or-unassigned speaker pipeline across capture, notes and review UI
 **Active work ID:** `OW-SPK-UNKNOWN-VALIDATE-20261030`
-**Canonical next action:** Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
+**Canonical next action:** Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
 **State source:** `PROJECT_STATE.md`
 **Preserved baseline:** `fix/meeting-speaker-timestamps-20261028`
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 
 ## Current Target
 
-[OW-SPK-UNKNOWN-VALIDATE-20261030] Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
+[OW-SPK-UNKNOWN-VALIDATE-20261030] Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
 
 ## Why This Is Next
 
@@ -24,7 +24,8 @@ The latest real Teams diagnostic established that weak and missing-embedding gro
 - `MeetingTranscriptChat.tsx` displays Unknown Speaker for unreviewed rows; the existing NoteEditor selection bar allows manually naming a chosen line. `transcriptFormatter.js` keeps unknown labels in TXT/SRT/Markdown, JSON reports unassigned count separately and excludes them from speaker count.
 - **New review fixes this turn:** `cfaae2f8` displays a manually named unknown row even though the cluster ID remains absent. `a94bea2d` assigns independently keyed speaker colors to those manually identified remote voices. Tests `5d9c215`, `9ec6a49`, `53a8e88` exercise rendering, re-selection and colors; `fa61fd5` protects end-to-end nine-native-cluster auto results when voice embeddings are unavailable.
 - Proposed Decision 0009 records the confidence-or-unassigned persistence and review behavior; Decisions 0005 and 0008 remain proposed, and 0006 (progress overlay) plus 0007 (retain and re-diarize) remain accepted **but not implemented**.
-- October 30 retry: GitHub connector successfully fetched actual current-branch pure JS modules and corresponding four test files, and an isolated V8 CommonJS/assert shim ran **56/56 passed** (8 conservative grouping + 37 diarization policy + 5 numeric diagnostics + 6 assignment policy). This is exact GitHub module/test source, but **not** a native Node test process or complete Electron/React/TypeScript suite. Shell `git ls-remote` still failed `Could not resolve host: github.com`; GitHub connector access remains functional. No Windows typecheck, renderer build or post-change Teams accuracy replay has run.
+- **October 30 expanded source-level execution:** GitHub connector fetched nine real JavaScript test modules and their production sources (speaker grouping 8, diarization policy 37, diagnostics 5, speaker assignment 6, meeting corrections 7, confidence 5, index base 5, diarization input 5, speaker count 3); **81/81 executed and passed** in an isolated V8 CommonJS/assert shim. This **does not** establish native Node/Electron/React/TypeScript or Windows results.
+- **New Windows verification path:** `scripts/verify-meeting-speakers.js` commit `60a56bf`, package command `verify:meeting-speakers` commit `9f4a074`, stages: 26 focused `node --import tsx --test` files (bounded concurrency=2), `npm run typecheck`, `npm run build:renderer`. Actual file paths all verified in GitHub. Script syntax and simulated Linux/Windows success, failure and missing-dependency branches all passed. **No native Windows execution yet**; GitHub connector reads/writes work, container DNS for `github.com` still fails.
 
 ## Current Hypothesis or Decision Point
 
@@ -36,26 +37,25 @@ The latest real Teams diagnostic established that weak and missing-embedding gro
 ## Next Action / Test
 
 **Active work ID:** `OW-SPK-UNKNOWN-VALIDATE-20261030`
-**Action:** [OW-SPK-UNKNOWN-VALIDATE-20261030] Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
+**Action:** [OW-SPK-UNKNOWN-VALIDATE-20261030] Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
 
-Use a refreshed Windows source checkout from branch `fix/meeting-auto-speaker-discovery-20261029` containing `fa61fd5`, `a94bea2`, `53a8e88`, and Decision 0009. In **x64 Native Tools Command Prompt** in the folder containing `package.json`, install dependencies once with `npm ci` only if it is a new extraction. Then execute:
+1. Download the **latest** ZIP for `fix/meeting-auto-speaker-discovery-20261029` into a fresh folder (the previous October 30 extracted ZIP predates the newer code), then open the folder containing `package.json` in **x64 Native Tools Command Prompt for VS**.
+2. If fresh, install dependencies once with `npm ci`. This also restores `tsx` and React test dependencies. Do not run `npm start` or re-record Teams yet.
+3. Run just **one command**:
 
 ```cmd
-set OPENWHISPR_LOG_LEVEL=info
-node --import tsx --test test/helpers/conservativeSpeakerGrouping.test.js test/helpers/diarizationPolicy.test.js test/helpers/diarizationSpeakerMerge.test.js test/helpers/meetingSpeakerReconcile.test.js test/helpers/meetingDiarizationEpochTimestamps.test.js test/helpers/transcriptFormatter.test.js test/utils/transcriptSpeakerStateBatch.test.js test/utils/diarizationCompletion.test.js test/components/meetingTranscriptChat.test.js test/components/meetingTranscriptSpeakerPicker.test.js
-npm run typecheck
-npm run build:renderer
+npm run verify:meeting-speakers
 ```
 
-If an assertion fails, inspect and repair the source/test against its actual behavior rather than weakening speaker-lock/timestamp protections. The `npm start` app launcher requires the renderer build in each new extraction; do **not** ask for another Teams playback until this code gate is green. If green, replay the **same** reference excerpt once using AirPods system output and log `capStrategy`, `unassignedNativeClusters`, `unassignedTranscriptSegments`, `confidentPreCapMergeCount`, `audioClusters`, and actual human speaker errors.
+4. The script runs 26 native Node/tsx regression files (speaker/locked/unknown, backend diarization, UI, note merge, exports), then the real `npm run typecheck` and `npm run build:renderer`; it stops and exits nonzero on the first failing stage, showing the original error. No GitHub Actions or paid cloud minutes needed.
+5. If all stages pass, run the same original Teams excerpt once to judge actual speaker identity and `unassignedNativeClusters`; no further manual audio replay before the build gate.
 
-**Proof:** Code tests/typecheck/build pass on the latest checkout and, eventually, real attribution improves without losing transcript words or user locks. No Github Actions minutes should be spent.
-
+**Validation achieved here:** 81/81 actual GitHub source/test bodies passed under a limited V8 shim; the command-orchestration logic and all referenced test paths passed source/mock checks. **Full native app build and real speaker accuracy remain unverified** until step 3 and subsequent controlled replay.
 ## Regression Checks
 
 - Existing fallback for user-selected/saved speaker totals stays unchanged; auto-system unknown handling must not fabricate numbered speaker IDs or overwrite named/locked rows.
 - Anonymous nine-cluster native-to-transcript test protects preservation of each word and conservative unknown status when embeddings are absent.
-- Renderer SSR and DOM tests cover unknown label, manually locked speakerless name visibility, re-selection and distinct color; note merges must not resurrect an older live name or speaker id.
+- Native validation command includes actual renderer SSR and DOM tests for unknown/locked labels, re-selection and distinct colors, plus note merge/export tests; these have **not yet executed in native Node** and may reveal errors that need correcting.
 - Export tests must continue counting identified people independently of unknown lines and show manually assigned names correctly across TXT, SRT, Markdown and JSON.
 - Preserve October 28 timestamp fixes, mic/system separation, Windows AirPods output, Orukeet corrections and profile reconciliation.
 - Remaining work includes speaker accuracy acceptance, progress overlay (0006), retained-source re-diarization (0007) and global rename everywhere; nothing in this patch proves them resolved.
@@ -69,7 +69,7 @@ If an assertion fails, inspect and repair the source/test against its actual beh
 
 ## Blockers / Needed Inputs
 
-- Source and tests are committed/read-back verified on GitHub. A retry executed **56/56 pure-JS GitHub source tests** under an isolated V8 assert shim, but container GitHub DNS is still unavailable for native checkout. Full Windows tests, TS typecheck, renderer build and actual runtime behavior remain **unverified**.
+- Source and tests are committed and read-back verified on GitHub. **81/81 pure-JS GitHub source tests** passed in isolated V8, and the one-command native verification launcher passed static/mock control tests. Container GitHub DNS remains unavailable for a full npm checkout; **native Windows test, TS check, renderer build and actual recorded speaker accuracy are still unverified**.
 - No more user's audio/transcript input is needed before running the focused Windows code checks. GitHub Actions is not used.
 - The current public repository has only anonymous synthetic tests/numeric diagnostics. Private Teams source files, participant identities and customer vocabulary remain off GitHub.
 
