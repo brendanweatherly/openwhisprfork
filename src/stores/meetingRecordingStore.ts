@@ -45,6 +45,11 @@ import {
   selectBaseSegments,
 } from "../utils/diarizationCompletion";
 import { createSerialQueue } from "../utils/serialQueue";
+import {
+  updateMeetingDiarizationProgress,
+  settleMeetingDiarizationProgress,
+  type MeetingDiarizationProgressMap,
+} from "../utils/meetingDiarizationProgress";
 import { reduceMeetingSegmentEvent, type MeetingSegmentEvent } from "./meetingSegmentReducer";
 import {
   canStopMeetingRecordingSession,
@@ -106,6 +111,8 @@ interface MeetingRecordingState {
   diarizationSessionId: string | null;
   /** Latest diarization result published for UI mirroring; consumed (nulled) by the editor that applies it. */
   completedDiarization: { noteId: number; segments: TranscriptSegment[] } | null;
+  /** Lives outside NoteEditor so navigating away never drops stage feedback. */
+  diarizationProgressBySession: MeetingDiarizationProgressMap;
   sessionDiarizationEnabled: boolean;
   sessionExpectedCount: number;
   userTouchedStepper: boolean;
@@ -472,6 +479,7 @@ export const useMeetingRecordingStore = create<MeetingRecordingState>()(() => ({
   systemPartialSpeakerName: null,
   diarizationSessionId: null,
   completedDiarization: null,
+  diarizationProgressBySession: {},
   sessionDiarizationEnabled:
     (getSettings() as { speakerDiarizationEnabled?: boolean }).speakerDiarizationEnabled ?? true,
   sessionExpectedCount: DEFAULT_EXPECTED_SPEAKER_COUNT,
@@ -1842,6 +1850,19 @@ export function cancelPreparedTranscription(): void {
   window.electronAPI?.meetingTranscriptionCancel?.();
 }
 
+// Stage events are also registered at module load: closing/swapping notes
+// cannot destroy their progress updates. Only non-sensitive numeric data
+// crosses this channel.
+if (typeof window !== "undefined") {
+  window.electronAPI?.onMeetingDiarizationProgress?.((event) => {
+    useMeetingRecordingStore.setState((state) => ({
+      diarizationProgressBySession: updateMeetingDiarizationProgress(
+        state.diarizationProgressBySession, event
+      ),
+    }));
+  });
+}
+
 // Persists delayed diarization results to the note that owns the recording
 // session (#1495). Registered once at module load so results survive the
 // notes view unmounting; NoteEditor only mirrors `completedDiarization`.
@@ -1869,6 +1890,13 @@ if (typeof window !== "undefined") {
         return;
       }
 
+      const finishProgress = (status: "success" | "skipped" | "failed") => {
+        useMeetingRecordingStore.setState((state) => ({
+          diarizationProgressBySession: settleMeetingDiarizationProgress(
+            state.diarizationProgressBySession, data?.sessionId, status
+          ),
+        }));
+      };
       // Publishing an empty result clears a waiting editor's spinner without
       // painting an overlay; anything non-empty is already persisted.
       const publish = (segments: TranscriptSegment[]) => {
@@ -1881,6 +1909,7 @@ if (typeof window !== "undefined") {
 
       if (!data?.segments?.length) {
         if (data?.sessionId) seedLengthByDiarizationSession.delete(data.sessionId);
+        finishProgress("skipped");
         publish([]);
         return;
       }
@@ -1904,6 +1933,7 @@ if (typeof window !== "undefined") {
       // would resurrect its tombstone in the sidebar, cloud mirror, and vector
       // index.
       if (!persisted || persisted.deleted_at) {
+        finishProgress("skipped");
         publish([]);
         return;
       }
@@ -1938,6 +1968,7 @@ if (typeof window !== "undefined") {
           transcript: serializeTranscriptSegments(enriched),
         });
       } catch (error) {
+        finishProgress("failed");
         publish([]);
         throw error;
       }
@@ -1966,12 +1997,18 @@ if (typeof window !== "undefined") {
           transcript: buildTranscriptText(merged.segments),
         });
       }
+      finishProgress("success");
       publish(enriched);
 
       if (data.speakerEmbeddings) {
         await window.electronAPI?.saveNoteSpeakerEmbeddings?.(targetNoteId, data.speakerEmbeddings);
       }
     }).catch((error) => {
+      useMeetingRecordingStore.setState((state) => ({
+        diarizationProgressBySession: settleMeetingDiarizationProgress(
+          state.diarizationProgressBySession, data?.sessionId, "failed"
+        ),
+      }));
       logger.error(
         "Diarization completion handling failed",
         { error: (error as Error).message },
