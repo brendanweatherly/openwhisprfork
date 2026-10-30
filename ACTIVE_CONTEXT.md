@@ -1,72 +1,75 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
-**Last updated:** 2026-10-30 - mutual high-confidence pre-cap grouping committed; unassigned overflow next
-**Current milestone:** Safely handle remaining automatic speaker overflow without false attribution
-**Active work ID:** `OW-SPK-UNKNOWN-20261030`
-**Canonical next action:** Implement a non-destructive unassigned-speaker fallback for unsupported automatic overflow, with renderer, export and user-lock regression tests.
+**Last updated:** 2026-10-30 - unknown-speaker pipeline reviewed and manual-name rendering fixed; test/build validation next
+**Current milestone:** Validate the confidence-or-unassigned speaker pipeline across capture, notes and review UI
+**Active work ID:** `OW-SPK-UNKNOWN-VALIDATE-20261030`
+**Canonical next action:** Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
 **State source:** `PROJECT_STATE.md`
 **Preserved baseline:** `fix/meeting-speaker-timestamps-20261028`
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 
 ## Current Target
 
-[OW-SPK-UNKNOWN-20261030] Implement a non-destructive unassigned-speaker fallback for unsupported automatic overflow, with renderer, export and user-lock regression tests.
+[OW-SPK-UNKNOWN-VALIDATE-20261030] Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
 
 ## Why This Is Next
 
-The third real Teams diagnostic exposed two independent defects: the old automatic speaker cap protected the seven largest native group IDs (even if two belonged to the same real voice) and then forced excess native groups onto those seven even when embeddings were missing or their closest cosine match was weak. A narrow first correction now permits *mutual high-confidence native pairs* to merge before the automatic cap, using the project's existing live-recluster score and margin, without affecting manual count selection. That correction is only an acoustic grouping trial; it does not prevent the later cap from falsely assigning unmatched statements to somebody else's voice. The next highest-value fix is a safe, reviewable unassigned-speaker pathway spanning the engine, transcript UI, note persistence, exports and manual locks. Do not ask for another Teams playback before that and consolidated tests are ready.
+The latest real Teams diagnostic established that weak and missing-embedding groups were being forcibly assigned to existing people. The working branch now contains a complete **automatic system-audio confidence-or-unassigned** pipeline: weak/missing groups become an internal unknown acoustic sentinel, then an unassigned transcript row, without fabricated numeric identity; locked edits win. Review of the recently committed UI found a remaining real problem: a user who manually named an unknown row saved the name but the transcript displayed no name chip because the row had no numeric speaker ID. That was corrected, and renderer/interaction/end-to-end no-embedding regression fixtures were added. The next meaningful gate is running those exact tests and the Windows app build, not asking for another Teams replay on unverified code.
 
 ## Latest Material Evidence
 
-- Real benchmark still stands: 17 native groups, 81 turns, seven final IDs, 13 embeddings, ten remaps, four missing-embedding joins, 59 text segments. Real people are split/merged; no new recording tested the subsequent code.
-- Earlier aggregated overlap matching code `07cd6ae`, regression `9d031ff` and audit `18fec36` remain committed but need Windows integration verification; they address **text-to-acoustic turn voting**, not native group identity.
-- New pure function `src/helpers/conservativeSpeakerGrouping.js` (`0b2816f`, `7f6cc24`) examines native groups with at least two distinct turns and available centroids. It requires **mutual best matching** at existing `LIVE_RECLUSTER_SIMILARITY=0.93` with `BATCH_LABEL_MARGIN=0.10`, no overlapping speech and one-pass disjoint matching. One-turn groups are still ranked as competing evidence and can block an ambiguous merge.
-- Node 22 local synthetic suite: **8 of 8 passed**, including matched top-7 native pair, weak/ambiguous/no-model cases, overlapping voices, one-turn veto, non-finite scores and no transitive chain. GitHub tests `87e6329` / `af6fd38`; local run used a copy of the new pure function and constants, **not the installed application**.
-- `ipcHandlers.js` commit `160aa0d` integrates pre-cap coalescence only if `countSource="auto"` and native clusters exceed `cap`; explicit/saved user-count processing is unchanged. It logs `confidentPreCapMergeCount`, `confidentPreCapMerges`, and `clustersAfterPreCapMerges` plus existing cap diagnostics. **No Windows full suite or real-audio benchmark has run after this change**.
-- New decision `decisions/0008-mutual-high-confidence-precap-grouping.md` is **Proposed / implemented for validation**, and existing decision 0005 remains Proposed / real speaker identity failed.
-- In the existing overflow cap, an unavailable centroid still forces a native group onto the longest kept speaker; a weak nearest candidate is also merged without a validated absolute confidence. An unknown/unassigned representation and review UX are not implemented.
-- Accepted user requirements: diarization progress overlay (0006), retained-source re-diarization without re-recording (0007); both pending.
+- Three Teams replay comparisons before the new unknown-handling code failed speaker-accuracy acceptance. Latest diagnostic: 17 native clusters, 13 embeddings, 10 remaps, four without matching evidence, 59 transcript chunks, 30 overlapping final acoustic groups. Those results motivated conservative unknown over unsupported identity.
+- Existing source on the working branch now has `capMeetingSpeakersWithUnknown` and `UNASSIGNED_ACOUSTIC_SPEAKER` in `diarizationPolicy.js`; main IPC uses it **only when countSource=auto and diarizedSource=system** with overflow. Weak/missing/overlapping candidates remain unknown. Explicit or saved user-set counts and mic-mode retain prior policy.
+- `diarization.js` converts the sentinel to a row with `speaker:undefined`, `speakerStatus:"unassigned"`, and stale live names cleared. `speakerAssignmentPolicy.js` preserves user locks. `transcriptSpeakerState.ts` serializes the state and prevents stale IDs/names from being restored during delayed note merges.
+- `MeetingTranscriptChat.tsx` displays Unknown Speaker for unreviewed rows; the existing NoteEditor selection bar allows manually naming a chosen line. `transcriptFormatter.js` keeps unknown labels in TXT/SRT/Markdown, JSON reports unassigned count separately and excludes them from speaker count.
+- **New review fixes this turn:** `cfaae2f8` displays a manually named unknown row even though the cluster ID remains absent. `a94bea2d` assigns independently keyed speaker colors to those manually identified remote voices. Tests `5d9c215`, `9ec6a49`, `53a8e88` exercise rendering, re-selection and colors; `fa61fd5` protects end-to-end nine-native-cluster auto results when voice embeddings are unavailable.
+- Proposed Decision 0009 records the confidence-or-unassigned persistence and review behavior; Decisions 0005 and 0008 remain proposed, and 0006 (progress overlay) plus 0007 (retain and re-diarize) remain accepted **but not implemented**.
+- These latest GitHub files and fixtures were read/written directly. **No full Windows focused test suite, typecheck, renderer build, or new Teams accuracy replay has run since this latest code.** The isolated previous pure grouping check (8/8) predates this unknown-handling implementation.
 
 ## Current Hypothesis or Decision Point
 
-- The high-confidence pre-cap pass may consolidate a few duplicated groups among the previous seven protected IDs, but can also conservatively do nothing. It is not validated for the real Teams sample and must not be called a complete fix.
-- The remaining unconditional overflow cap is a confirmed correctness defect for centroids-missing groups; the source and prior log prove false attribution risk without identity evidence.
-- Project Decision 0003 accepts conservative unknown-over-wrong identity; therefore a reviewable provisional/unassigned state is preferred, provided it survives renderer, persistence, exports, note merging and user locks.
-- Do not apply new acoustic thresholds or remove the automatic speaker cap blindly. Do not replace Orukeet or regress the known-good AirPods and timestamp behavior.
+- Unknown-over-wrong is the accepted product safety principle (Decision 0003). This particular automatic system-overflow implementation is **proposed for validation**, not an accepted real-world speaker policy.
+- The strict mutual pre-cap similarity pass may produce zero merges, and the seven retained acoustic IDs can still include duplicate real people. The new unknown fallback can reduce false assignments for overflow but does not solve native over-fragmentation or mixed-speaker ASR chunks.
+- Additional manual speaker-name workflow review confirmed an actual gap and patched it without inventing speaker numbers. The speakerless/locked state survives exports by design, but needs actual renderer and persistence test execution.
+- Do not alter native thresholds, force five speakers, replace Orukeet or reopen known-good timestamps/AirPods capture without contrary real evidence.
 
 ## Next Action / Test
 
-**Active work ID:** `OW-SPK-UNKNOWN-20261030`
-**Action:** [OW-SPK-UNKNOWN-20261030] Implement a non-destructive unassigned-speaker fallback for unsupported automatic overflow, with renderer, export and user-lock regression tests.
+**Active work ID:** `OW-SPK-UNKNOWN-VALIDATE-20261030`
+**Action:** [OW-SPK-UNKNOWN-VALIDATE-20261030] Run focused speaker, transcript UI, persistence and export regressions plus TypeScript and renderer build on the updated branch.
 
-1. Inspect the complete flow of acoustic `speaker` IDs through `diarization.js::mergeWithTranscript`, `ipcHandlers.js` speaker-set/reservation/embed mapping, `meetingRecordingStore.ts`, `transcriptSpeakerState.ts`, `MeetingTranscriptChat.tsx` and exported transcript formatting. A null/empty speaker must not resurrect a stale provisional live name or create a fake speaker ID.
-2. Design and implement a conservative auto-only unknown result for extras with no usable embedding or no confident match. Reuse established speaker confidence policy rather than choosing an arbitrary new cosine threshold. Explicit user-selected counts remain authoritative; prevent unexpected changes.
-3. Add anonymous tests that confirm no forced assignment of unmatched fragments, preserve every transcript word, avoid speaker-ID collisions, keep manually locked names, and display/export an understandable 'unassigned' label.
-4. Run the new pure grouping/unknown tests and full focused speaker suite/typecheck/renderer build on a refreshed Windows checkout **once the complete code candidate is ready**; preserve known-good baseline `fix/meeting-speaker-timestamps-20261028`.
-5. Only then compare the same Teams excerpt in one new local recording. Inspect `confidentPreCapMergeCount`, low-confidence forced joins, mixed-chunk overlap and human speaker accuracy. Avoid additional GitHub Actions minutes and never publish real audio/transcript in public GitHub.
+Use a refreshed Windows source checkout from branch `fix/meeting-auto-speaker-discovery-20261029` containing `fa61fd5`, `a94bea2`, `53a8e88`, and Decision 0009. In **x64 Native Tools Command Prompt** in the folder containing `package.json`, install dependencies once with `npm ci` only if it is a new extraction. Then execute:
 
-**Proof gate:** False low-evidence speaker assignments are not made silently. All app layers and previous tests still work; a clean synthetic suite does not equal real speaker correctness.
+```cmd
+set OPENWHISPR_LOG_LEVEL=info
+node --import tsx --test test/helpers/conservativeSpeakerGrouping.test.js test/helpers/diarizationPolicy.test.js test/helpers/diarizationSpeakerMerge.test.js test/helpers/meetingSpeakerReconcile.test.js test/helpers/meetingDiarizationEpochTimestamps.test.js test/helpers/transcriptFormatter.test.js test/utils/transcriptSpeakerStateBatch.test.js test/utils/diarizationCompletion.test.js test/components/meetingTranscriptChat.test.js test/components/meetingTranscriptSpeakerPicker.test.js
+npm run typecheck
+npm run build:renderer
+```
+
+If an assertion fails, inspect and repair the source/test against its actual behavior rather than weakening speaker-lock/timestamp protections. The `npm start` app launcher requires the renderer build in each new extraction; do **not** ask for another Teams playback until this code gate is green. If green, replay the **same** reference excerpt once using AirPods system output and log `capStrategy`, `unassignedNativeClusters`, `unassignedTranscriptSegments`, `confidentPreCapMergeCount`, `audioClusters`, and actual human speaker errors.
+
+**Proof:** Code tests/typecheck/build pass on the latest checkout and, eventually, real attribution improves without losing transcript words or user locks. No Github Actions minutes should be spent.
 
 ## Regression Checks
 
-- New pre-cap code must only affect `auto` and only above the supported cap; explicit/saved stepper counts and post-stop completion still work.
-- No new fabricated threshold: existing live recluster 0.93 and batch margin 0.10 apply in the optional high-confidence pass; no weak or overlapping clusters may pre-merge.
-- Unassigned acoustic statements must remain reviewable in UI, preserve all transcript text, survive note save/reload/exports, not inherit provisional wrong names and respect manual user locks.
-- Protect speaker index renumbering and separate mic/system tracks, historical timestamps, Orukeet corrections and confirmed AirPods capture.
-- No customer names, actual transcript lines, private audio or vocabulary in public test fixtures or numeric audit logs.
-- Progress overlay and retained-audio reprocess remain accepted requirements but are not yet implemented.
+- Existing fallback for user-selected/saved speaker totals stays unchanged; auto-system unknown handling must not fabricate numbered speaker IDs or overwrite named/locked rows.
+- Anonymous nine-cluster native-to-transcript test protects preservation of each word and conservative unknown status when embeddings are absent.
+- Renderer SSR and DOM tests cover unknown label, manually locked speakerless name visibility, re-selection and distinct color; note merges must not resurrect an older live name or speaker id.
+- Export tests must continue counting identified people independently of unknown lines and show manually assigned names correctly across TXT, SRT, Markdown and JSON.
+- Preserve October 28 timestamp fixes, mic/system separation, Windows AirPods output, Orukeet corrections and profile reconciliation.
+- Remaining work includes speaker accuracy acceptance, progress overlay (0006), retained-source re-diarization (0007) and global rename everywhere; nothing in this patch proves them resolved.
 
 ## Immediate Branches
 
-- An unknown-speaker state can round-trip safely -> validate with full Windows tests and then compare the same Teams reference recording.
-- Renderer/persistence cannot yet express unknown reliably -> implement the minimal durable representation and tests before changing live algorithm behavior.
-- Confidence-gated grouping merges wrong real voices -> disable trial or tighten evidence based on matched recordings, preserving Oct. 28 baseline and user locks.
-- Grouping does nothing in noisy audio -> do not relax uncalibrated thresholds; investigate embedding stability or alternative local diarization models after protecting uncertainty.
+- Windows tests/typecheck/renderer pass -> compare same Teams excerpt once and inspect whether weak groups become unknown instead of falsely being named; assess actual voice accuracy rather than only number of labels.
+- Test fails in UI/serialization -> patch the exact transition with a regression; do not change acoustic thresholds as a workaround.
+- Unknown fallback causes excessive manual review -> evaluate confidence evidence and identity grouping while preserving Decision 0003's conservative policy, without assuming same-speaker cosine thresholds are calibrated.
+- New mic-mode/in-person false matches -> keep that as a distinct validated policy change; the current path is system-auto only.
 
 ## Blockers / Needed Inputs
 
-- No immediate user input or new recording required; sufficient failed-replay evidence is already available.
-- GitHub branch contains the new pure helper, tests and IPC integration; eight local synthetic Node tests passed. Full project tests/typecheck/renderer build and real audio benchmark **pending**. Do not claim completion.
-- Container cannot resolve github.com to clone complete dependencies; GitHub connector works for reading/writing source. No GitHub Actions minutes consumed.
-- Private meeting transcript/audio must not be committed to the public repository.
+- Source and tests are committed and read-back verified on GitHub, but **not** executed in a full checkout here. Container GitHub DNS resolution is unavailable; do not claim green Windows tests or app behavior.
+- No more user's audio/transcript input is needed before running the focused Windows code checks. GitHub Actions is not used.
+- The current public repository has only anonymous synthetic tests/numeric diagnostics. Private Teams source files, participant identities and customer vocabulary remain off GitHub.
 
