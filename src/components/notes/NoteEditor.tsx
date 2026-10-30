@@ -1490,7 +1490,7 @@ export default function NoteEditor({
             progress={actionProgress ?? null}
             onCancel={onCancelAction}
           />
-          {!isRecording && (
+          {!isRecording && actionProcessingState !== "processing" && (
             <MeetingDiarizationProgressOverlay
               progress={diarizationProgress}
               onDismiss={dismissDiarization}
