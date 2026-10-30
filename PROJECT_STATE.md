@@ -1,12 +1,12 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
-**Last reconciled:** 2026-10-30 (accepted stage-aware progress overlay implemented after previous Windows validation)
+**Last reconciled:** 2026-10-30 (holistic priority reset: retain audio before further repeated Teams replay)
 **State confidence:** User's previous Windows gate passed 245/249 tests (four skipped, zero failures), typecheck and renderer build; this was BEFORE the newly committed progress-overlay code. Stage-aware main IPC, preload, typed renderer store, note overlay and English labels are now committed, but only the six isolated TS-reducer tests (converted to JS for V8) were executed and passed. New native Windows tests/build, progress-UI interaction, and real Teams speaker-identity accuracy are NOT YET VERIFIED. Original real replay still failed attribution.
-**Current milestone:** Validate end-to-end Teams speaker accuracy and the new progress overlay
+**Current milestone:** Enable non-destructive speaker reprocessing from retained meeting audio
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
-**Active work ID:** `OW-REAL-PROGRESS-20261030`
-**Canonical next action:** Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
+**Active work ID:** `OW-AUDIO-RERUN-20261030`
+**Canonical next action:** Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
 **Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
@@ -127,19 +127,19 @@ Meeting detection/start
 
 ## 9. Current Priority Order
 
-1. [OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
-2. Diagnose real false speaker joins/splits against the existing Teams reference; do not promote Decisions 0005/0008/0009 merely because the speaker-count or source tests pass.
-3. Implement retained local mic/system audio and non-destructive post-meeting re-diarization (accepted Decision 0007), preserving user locks, transcript words and source retention choices.
-4. Complete global rename, improve technical ASR correctness and native Windows packaging/device-switch validation while retaining the known-good AirPods/Orukeet path.
-5. Review progress overlay on long and failed runs; address Vite chunk-size/performance warning separately if real startup performance warrants it.
+1. [OW-AUDIO-RERUN-20261030] Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
+2. Re-run the updated focused Windows suite/typecheck/renderer build (which now includes progress tests), then compare the original Teams audio once and use retained local tracks for subsequent speaker algorithm experiments without repeated manual recording.
+3. Resolve measured native voice fragmentation/ASR-turn attribution and accept Decisions 0005/0008/0009 only after actual participant identity improves. The earlier real tests failed despite code-level passes.
+4. Validate the new stage-aware progress overlay (accepted Decision 0006), including success, skipped, failed, navigation and elapsed-time behavior while source audio is preserved.
+5. Complete global rename, technical ASR accuracy, full Windows output/installer and long-meeting reliability gates without regressing AirPods/Orukeet.
 
 ## 10. Current Focus
 
 - Active context: `ACTIVE_CONTEXT.md`
-- Active work ID: `OW-REAL-PROGRESS-20261030`
-- Current target: [OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
+- Active work ID: `OW-AUDIO-RERUN-20261030`
+- Current target: [OW-AUDIO-RERUN-20261030] Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: Previous Windows regression/typecheck/renderer gate passed (245 pass, four skipped); new stage-aware main-to-renderer diarization overlay is **committed and isolated reducer logic tested 6/6**, but NEW Windows tests, UI/live stages, and post-change real speaker accuracy are not verified.
+- Current status: Previous focused Windows tests/typecheck/renderer passed (245 pass, four skipped) on the speaker candidate, but not on this turn's committed progress overlay. Six pure progress-reducer checks passed in isolation; full new native/real overlay checks pending. The upstream daily-use blocker is **source PCM deletion after diarization**, preventing non-destructive reruns and forcing repeated user recording. Preserve the Oct. 28 working capture baseline while implementing Decision 0007.
 
 ## 11. Recent Material State Changes
 
@@ -170,8 +170,8 @@ Meeting detection/start
 
 ## 13. Next Best Step
 
-**Active work ID:** `OW-REAL-PROGRESS-20261030`
-**Next:** [OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
-**Why:** The previous code/build validation passed, and the new accepted progress-overlay implementation now needs its own native gate. Speaker accuracy is still the highest-impact missing end-to-end proof; a matched Teams replay should test both actual identity and visible stage transitions in one pass, not separate repeated recordings.
-**Proof:** Updated tests/typecheck/renderer build pass; the overlay follows the correct note and displays real stages/elapsed time; success/skip/failure clear predictably; the speaker transcript identifies real participants more accurately without corrupting words, manual locks or device-local correction.
-**If failed:** Fix the precise Windows/UI or speaker error with matched evidence; preserve the Oct. 28 baseline and Decisions 0005/0008/0009 Proposed. If passed, begin retained-audio re-diarization and broader Windows acceptance testing.
+**Active work ID:** `OW-AUDIO-RERUN-20261030`
+**Next:** [OW-AUDIO-RERUN-20261030] Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
+**Why:** Real speaker attribution still lacks matched evidence, but asking the user to replay Teams repeatedly is an avoidable burden and won't support iterative fixes. The current post-stop pipeline deletes temporary raw PCM and can drop the mic track after system audio becomes audible. Preserving original tracks with note/session ownership and compliant deletion is the critical prerequisite for re-running speakers safely. This work is explicitly accepted as Decision 0007.
+**It should prove:** After a saved meeting, both applicable local audio sources survive per user retention policy; the user can re-run speaker identification with a new count without re-recording or rerunning ASR. Existing words, summaries, manual locks and earlier label versions remain recoverable; deleted notes do not retain orphaned audio.
+**Afterwards:** Re-run the expanded native Windows verification, test the new progress overlay, then perform one matched real Teams benchmark and repeat diarization locally without further recording. Maintain Decisions 0005/0008/0009 as Proposed until accurate speaker identity is proven.
