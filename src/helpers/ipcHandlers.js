@@ -13201,6 +13201,17 @@ class IPCHandlers {
       ...retractedSegments,
       ...transcriptSegments.filter((_, index) => isEchoDuplicate(index)),
     ].map(({ text, source, timestamp }) => ({ text, source, timestamp }));
+    const progressStartedAt = Date.now();
+    // Actual main-process stage boundaries; never claim a percentage when a
+    // native diarizer cannot report one. The note/session IDs protect against
+    // updates leaking into another open note after navigation.
+    const sendProgress = (stage, status = "running") => {
+      if (noteId == null || !win || win.isDestroyed()) return;
+      win.webContents.send("meeting-diarization-progress", {
+        sessionId, noteId, stage, status,
+        startedAt: progressStartedAt, updatedAt: Date.now(),
+      });
+    };
     const send = (payload) => {
       if (win && !win.isDestroyed()) {
         win.webContents.send("meeting-diarization-complete", {
@@ -13222,9 +13233,11 @@ class IPCHandlers {
     const diarizationEnabled = (sessionConfig?.enabled ?? this.speakerDiarizationEnabled) !== false;
 
     if (!diarizationEnabled || !this.diarizationManager?.isAvailable() || !rawPcmPath) {
+      sendProgress("preparing", "skipped");
       sendUndiarized();
       return;
     }
+    sendProgress("preparing");
 
     const fs = require("fs");
 
@@ -13261,9 +13274,11 @@ class IPCHandlers {
       let tmpWav = null;
       try {
         tmpWav = await this.diarizationManager.convertRawPcmToWav(rawPcmPath, 24000);
+        sendProgress("clustering");
         // Always discover clusters first. Forcing a native cluster count can
         // irreversibly merge distinct voices before our speaker cap or voting.
         let diarizationSegments = await this.diarizationManager.diarize(tmpWav);
+        sendProgress("matching");
         const nativeAudioClusters = new Set(diarizationSegments.map((seg) => seg.speaker)).size;
         const {
           summarizeNativeClusters,
@@ -13553,8 +13568,12 @@ class IPCHandlers {
           transcriptSegments: enrichedSegments.length,
           namedSegments: enrichedSegments.filter((seg) => !!seg.speakerName).length,
         });
+        // Persistence happens in the renderer's module-level completion
+        // listener; only that listener may mark a successful saved result.
+        sendProgress("saving");
         send({ segments: enrichedSegments, speakerEmbeddings: speakerEmbeddingsMap });
       } catch (err) {
+        sendProgress(undefined, "failed");
         debugLogger.warn("Background diarization failed", { error: err.message });
         this._diarizationSpeakerReservations.delete(sessionId);
         // The renderer only applies removedSegments alongside segments, so a
