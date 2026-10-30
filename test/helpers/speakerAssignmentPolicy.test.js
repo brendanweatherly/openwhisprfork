@@ -9,6 +9,7 @@ const {
   applyProvisionalSpeaker,
   applyConfirmedSpeaker,
   applySuggestedSpeaker,
+  applyUnassignedSpeaker,
 } = require("../../src/helpers/speakerAssignmentPolicy");
 
 test("canonicalizeSpeakerStatus maps legacy and current statuses correctly", () => {
@@ -63,4 +64,41 @@ test("locked segments preserve lock status on updates", () => {
 
   applySuggestedSpeaker(lockedSegment, { speaker: "Bob" });
   assert.equal(lockedSegment.speaker, "Alice");
+});
+
+
+test("unassigned final speaker clears a live guess and does not erase the spoken words", () => {
+  const row = {
+    text: "synthetic statement",
+    speaker: "speaker_4",
+    speakerName: "Unreviewed live label",
+    suggestedName: "Guessed profile",
+    suggestedProfileId: 12,
+    speakerStatus: "provisional",
+  };
+  applyUnassignedSpeaker(row);
+  assert.equal(row.text, "synthetic statement");
+  assert.equal(row.speaker, undefined);
+  assert.equal(row.speakerName, undefined);
+  assert.equal(row.suggestedName, undefined);
+  assert.equal(row.suggestedProfileId, undefined);
+  assert.equal(row.speakerIsPlaceholder, true);
+  assert.equal(row.speakerStatus, "unassigned");
+  assert.equal(canonicalizeSpeakerStatus("unassigned"), "unassigned");
+});
+
+test("a user-locked identity cannot be cleared by automatic unassigned processing", () => {
+  const row = {
+    text: "reviewed statement",
+    speaker: "speaker_9",
+    speakerName: "Reviewed person",
+    speakerStatus: "locked",
+    speakerLocked: true,
+    speakerLockSource: "user",
+  };
+  applyUnassignedSpeaker(row);
+  assert.equal(row.speaker, "speaker_9");
+  assert.equal(row.speakerName, "Reviewed person");
+  assert.equal(row.speakerStatus, "locked");
+  assert.equal(row.speakerLocked, true);
 });
