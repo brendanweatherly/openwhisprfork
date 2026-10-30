@@ -1,6 +1,6 @@
 # Decision 0005 - Final diarization uses native speaker discovery; only user-set counts limit it
 
-**Status:** Proposed (voice-aware cap exercised in October 30 replay, but speaker attribution still fails; no policy acceptance)
+**Status:** Proposed (three real tests still show fragmented/mixed speakers; safe automatic grouping and chunk attribution not yet accepted)
 **Date:** 2026-10-29
 **Decision owner:** OpenWhispr fork project (technical proposal; user approval not inferred)
 **Supersedes:** Previous implicit behavior that allowed defaults, calendar rosters, and provisional live cluster counts to cap final results
@@ -68,6 +68,18 @@ The new Windows development-branch recording **did execute** `capStrategy: "voic
 **Next evidence gate:** Commits `88abab3`, `7bc8cba` and `f6c2904` add numeric-only diagnostics and anonymous tests for raw acoustic turn durations, missing embeddings, individual remap similarity/fallback evidence, and multi-cluster transcript overlap. Four equivalent synthetic diagnostics passed locally; the full fork/Windows integration suite and diagnostics replay have **not** been executed after these commits. No meeting words, names, or voice data were committed.
 
 This decision remains **Proposed**. Do not tune the native clustering threshold, accept the cap as correct, or promote the working branch based only on a seven-cluster output.
+
+## Third real replay and alignment follow-up (2026-10-30)
+
+The October 30 diagnostic replay completed with **17 native acoustic clusters, 81 acoustic turns, 7 final clusters, 13 available centroids, 10 cluster remaps and 59 transcript chunks**. Four remaps had no voice embedding and were blindly assigned to the dominant retained cluster. Those four short source clusters total **4.95 seconds, approximately 2% of 245.84 seconds of detected speech**, so they are genuine unsupported assignments but cannot alone account for widespread identity errors. Six centroid-supported remaps had similarities from **0.451 to 0.795**; none is independently calibrated as same-speaker evidence.
+
+**30 of 59** text chunks overlapped multiple *final* acoustic cluster IDs; **13 of 59** had no 70%-dominant cluster. The accompanying private transcript shows distinct self-introductions assigned to the same placeholder ID and single speaking turns fragmented across multiple IDs. The Teams/audio data and names remain private and are not in this repository.
+
+**Architectural finding:** Keeping the seven longest native clusters guarantees seven final identifiers whenever native discovery finds more than seven, even if the actual conversation has fewer people; it cannot consolidate two of those retained clusters even if they are the same person. A duration-only overflow fallback is also unsupported, and single ASR chunks can contain more than one real voice. The final seven-label count is **not a speaker-accuracy metric**.
+
+**Narrow correction committed for further validation:** `src/helpers/diarization.js` now totals ASR-chunk overlap by each final speaker across *all their acoustic turns*, instead of choosing the longest individual turn (commit `07cd6ae`). Synthetic regression tests cover the changed decision and user locks (`9d031ff`). The numeric diagnostic now reports `aggregateVoteDiffersFromSingleTurn` (`18fec36`, test commits `88ed480` and `4e391be`). Seven equivalent isolated Node checks passed, but the full Windows speaker suite/build and the real replay **have not been run since these changes**.
+
+This correction does **not** solve the remaining automatic seven-speaker clustering, low-confidence joins or genuine text chunks containing multiple voices. A confidence-aware/unknown-speaker approach remains **proposed**, not an accepted behavior. Do not promote the branch or change acoustic thresholds based on these raw counts alone.
 
 ## Acceptance gate
 
