@@ -9,6 +9,7 @@ require.cache[require.resolve("electron")] = {
     app: {
       getPath: () => "/tmp",
       getAppPath: () => process.cwd(),
+      isReady: () => false,
       isPackaged: false,
     },
     net: {},
@@ -64,6 +65,49 @@ test("the largest overlapping cluster still wins over the nearest one", () => {
   );
 
   assert.equal(merged[0].speaker, "speaker_1");
+});
+
+test("aggregates multiple acoustic turns per speaker before assigning one ASR chunk", () => {
+  const manager = new DiarizationManager();
+  // One five-second ASR chunk covers A -> B -> A. Individually, B's 1.8s
+  // is longer than either A turn, but A owns 2.9s in total.
+  // The old maximum-SINGLE-turn policy incorrectly labelled it as B.
+  const merged = manager.mergeWithTranscript(
+    [systemSegment(10, "synthetic uninterrupted transcript"), systemSegment(15, "next")],
+    [
+      { start: 10, end: 11.2, speaker: "speaker_A" },
+      { start: 11.2, end: 13, speaker: "speaker_B" },
+      { start: 13, end: 14.7, speaker: "speaker_A" },
+    ]
+  );
+
+  assert.equal(merged[0].speaker, "speaker_0");
+  assert.equal(merged[0].text, "synthetic uninterrupted transcript");
+  assert.equal(merged.length, 2, "speaker attribution does not invent or split words");
+});
+
+test("aggregated-overlap correction never overwrites a manually locked speaker", () => {
+  const manager = new DiarizationManager();
+  const merged = manager.mergeWithTranscript(
+    [{
+      ...systemSegment(10, "manually reviewed text"),
+      speaker: "speaker_7",
+      speakerName: "Reviewed Person",
+      speakerStatus: "locked",
+      speakerLocked: true,
+      speakerLockSource: "user",
+    }, systemSegment(15, "next")],
+    [
+      { start: 10, end: 11.2, speaker: "speaker_A" },
+      { start: 11.2, end: 13, speaker: "speaker_B" },
+      { start: 13, end: 14.7, speaker: "speaker_A" },
+    ]
+  );
+
+  assert.equal(merged[0].speaker, "speaker_7");
+  assert.equal(merged[0].speakerName, "Reviewed Person");
+  assert.equal(merged[0].speakerStatus, "locked");
+  assert.equal(merged[0].speakerLocked, true);
 });
 
 test("mic segments stay owned by you and survive an empty diarization run", () => {
