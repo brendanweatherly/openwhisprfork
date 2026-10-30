@@ -33,8 +33,9 @@ export function updateMeetingDiarizationProgress(
     !event ||
     typeof event.sessionId !== "string" ||
     !event.sessionId ||
+    typeof event.noteId !== "number" ||
     !Number.isSafeInteger(event.noteId) ||
-    Number(event.noteId) <= 0 ||
+    event.noteId <= 0 ||
     (event.stage != null && !STAGES.includes(event.stage)) ||
     (event.status != null && !["running", "success", "skipped", "failed"].includes(event.status))
   ) return previous;
