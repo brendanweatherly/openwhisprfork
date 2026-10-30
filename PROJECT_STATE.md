@@ -159,6 +159,7 @@ Meeting detection/start
 - Multi-second transcript chunks can contain speech from more than one speaker; single-turn maximum-overlap logic may assign the chunk to the wrong one. New overlap audit measures this without changing assignments.
 - User reports successful previous typecheck/build; diagnostics commits now need focused regression and Windows integration verification. No GitHub Actions usage.
 - The fresh October 30 extracted checkout failed in the sherpa-onnx unpack step because `unbzip2-stream` was not installed locally; `npm ci` should restore it from the existing lockfile. Do not alter repository dependencies or re-download ZIP without an npm install error.
+- Once dependencies were installed and `npm start` proceeded, Electron showed a startup dialog: HTML file not found. Source `devServerManager.js` loads `src/dist/index.html` outside `NODE_ENV=development`, while `npm start`'s prestart does not run the Vite renderer build. In each newly extracted ZIP, run `npm run build:renderer` to create `src/dist/index.html`, then `npm start`; startup not yet user-confirmed after this guidance.
 - Progress overlay, retained-audio re-diarization, review-lock persistence, and global rename remain separate accepted/unproven behaviors.
 - Preserve the Oct. 28 known-good baseline, AirPods audio output, Orukeet, and private technical corrections. No customer transcription/voice data in public GitHub.
 
