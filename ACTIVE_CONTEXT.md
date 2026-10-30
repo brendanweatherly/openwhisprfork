@@ -1,75 +1,73 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
-**Last updated:** 2026-10-30 - expanded pure tests to 81/81; one-command native Windows validation committed
-**Current milestone:** Validate the confidence-or-unassigned speaker pipeline across capture, notes and review UI
-**Active work ID:** `OW-SPK-UNKNOWN-VALIDATE-20261030`
-**Canonical next action:** Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
+**Last updated:** 2026-10-30 - progress overlay committed; previous Windows suite passed, updated tests and real audio pending
+**Current milestone:** Validate end-to-end Teams speaker accuracy and the new progress overlay
+**Active work ID:** `OW-REAL-PROGRESS-20261030`
+**Canonical next action:** Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
 **State source:** `PROJECT_STATE.md`
 **Preserved baseline:** `fix/meeting-speaker-timestamps-20261028`
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 
 ## Current Target
 
-[OW-SPK-UNKNOWN-VALIDATE-20261030] Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
+[OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
 
 ## Why This Is Next
 
-The latest real Teams diagnostic established that weak and missing-embedding groups were being forcibly assigned to existing people. The working branch now contains a complete **automatic system-audio confidence-or-unassigned** pipeline: weak/missing groups become an internal unknown acoustic sentinel, then an unassigned transcript row, without fabricated numeric identity; locked edits win. Review of the recently committed UI found a remaining real problem: a user who manually named an unknown row saved the name but the transcript displayed no name chip because the row had no numeric speaker ID. That was corrected, and renderer/interaction/end-to-end no-embedding regression fixtures were added. The next meaningful gate is running those exact tests and the Windows app build, not asking for another Teams replay on unverified code.
+The user confirmed that the prior native Windows speaker gate passed (249 tests, 245 passed, 4 skipped, zero failed; TypeScript and renderer build passed). The original daily-use goal is nevertheless not achieved until distinct real speakers are correctly identified and reviewable. The previous three real Teams trials failed identity accuracy and predate the new conservative voice grouping/unassigned changes. A newly accepted stage-aware progress overlay is now committed, driven by real main-process boundaries, so the **next meaningful gate is one updated Windows test run plus one matched real-audio benchmark**. Do not replace the proof with more speculative threshold tuning or repeated isolated-source tests. Retained source-audio re-diarization is the next major implementation dependency once accuracy evidence is available.
 
 ## Latest Material Evidence
 
-- Three Teams replay comparisons before the new unknown-handling code failed speaker-accuracy acceptance. Latest diagnostic: 17 native clusters, 13 embeddings, 10 remaps, four without matching evidence, 59 transcript chunks, 30 overlapping final acoustic groups. Those results motivated conservative unknown over unsupported identity.
-- Existing source on the working branch now has `capMeetingSpeakersWithUnknown` and `UNASSIGNED_ACOUSTIC_SPEAKER` in `diarizationPolicy.js`; main IPC uses it **only when countSource=auto and diarizedSource=system** with overflow. Weak/missing/overlapping candidates remain unknown. Explicit or saved user-set counts and mic-mode retain prior policy.
-- `diarization.js` converts the sentinel to a row with `speaker:undefined`, `speakerStatus:"unassigned"`, and stale live names cleared. `speakerAssignmentPolicy.js` preserves user locks. `transcriptSpeakerState.ts` serializes the state and prevents stale IDs/names from being restored during delayed note merges.
-- `MeetingTranscriptChat.tsx` displays Unknown Speaker for unreviewed rows; the existing NoteEditor selection bar allows manually naming a chosen line. `transcriptFormatter.js` keeps unknown labels in TXT/SRT/Markdown, JSON reports unassigned count separately and excludes them from speaker count.
-- **New review fixes this turn:** `cfaae2f8` displays a manually named unknown row even though the cluster ID remains absent. `a94bea2d` assigns independently keyed speaker colors to those manually identified remote voices. Tests `5d9c215`, `9ec6a49`, `53a8e88` exercise rendering, re-selection and colors; `fa61fd5` protects end-to-end nine-native-cluster auto results when voice embeddings are unavailable.
-- Proposed Decision 0009 records the confidence-or-unassigned persistence and review behavior; Decisions 0005 and 0008 remain proposed, and 0006 (progress overlay) plus 0007 (retain and re-diarize) remain accepted **but not implemented**.
-- **October 30 expanded source-level execution:** GitHub connector fetched nine real JavaScript test modules and their production sources (speaker grouping 8, diarization policy 37, diagnostics 5, speaker assignment 6, meeting corrections 7, confidence 5, index base 5, diarization input 5, speaker count 3); **81/81 executed and passed** in an isolated V8 CommonJS/assert shim. This **does not** establish native Node/Electron/React/TypeScript or Windows results.
-- **New Windows verification path:** `scripts/verify-meeting-speakers.js` commit `60a56bf`, package command `verify:meeting-speakers` commit `9f4a074`, stages: 26 focused `node --import tsx --test` files (bounded concurrency=2), `npm run typecheck`, `npm run build:renderer`. Actual file paths all verified in GitHub. Script syntax and simulated Linux/Windows success, failure and missing-dependency branches all passed. **No native Windows execution yet**; GitHub connector reads/writes work, container DNS for `github.com` still fails.
+- Original objective: reliable Windows local-first meeting recorder with selected AirPods output, separated system/mic capture, Orukeet with device-local corrections, stable timestamps, conservative speaker names/locks, summary/export, a visible progress overlay, and retained audio for later re-diarization.
+- Known-good protected branch: `fix/meeting-speaker-timestamps-20261028`. Active development branch: `fix/meeting-auto-speaker-discovery-20261029`. Do not alter selected-output fallback policy or Orukeet architecture.
+- Real Teams benchmark before recent speaker patches: 17 raw groups, 81 turns, seven final IDs, 13 centroids, ten remaps (four missing embeddings), 59 text windows (30 overlapping groups). Different real people shared final labels. Ground-truth speaker quality on newest code is unknown.
+- Current candidate: total-overlap transcript attribution, mutual high-confidence native groups before cap, and unassigned unknowns for unsupported system-auto overflow. User-reviewed locks remain authoritative. Decision records 0005/0008/0009 are **Proposed**, not proven in real audio.
+- Prior Windows speaker validation directly user-reported: 249 tests, **245 passed, four skipped, zero failed**, TypeScript and Vite renderer built successfully (nonblocking >500 kB chunk warning). This was **before** the new progress overlay commits.
+- Accepted Decision 0006 now has code: main stage events `preparing`, `clustering`, `matching`, `saving`, terminal skipped/failed; preload/type bridge, module-scoped progress map keyed by note/session, success only after transcript persistence, note-editor overlay showing actual stages and elapsed time with no fabricated percent. Action overlays retain precedence; no unsafe native cancellation.
+- New `meetingDiarizationProgress.test.js` has six cases; the exact GitHub TS reducer (type-only syntax removed) passed **6/6** in an isolated V8 test harness. Existing post-stop mock tests updated to filter progress vs completion; three new IPC stage tests and three renderer SSR tests committed but **not yet run in native Windows/React**.
+- Added the two new progress test files to `npm run verify:meeting-speakers` (now 28 files). Current source files and decisions were fetched directly from the connected GitHub repo. No confidential audio/transcript data written to public GitHub.
+- Accepted Decision 0007 (retain mic/system audio and non-destructive re-diarization) remains **unimplemented**. Further outstanding items: global rename, clean installer, output devices besides AirPods, long-meeting technical ASR accuracy and normal daily-use performance.
 
 ## Current Hypothesis or Decision Point
 
-- Unknown-over-wrong is the accepted product safety principle (Decision 0003). This particular automatic system-overflow implementation is **proposed for validation**, not an accepted real-world speaker policy.
-- The strict mutual pre-cap similarity pass may produce zero merges, and the seven retained acoustic IDs can still include duplicate real people. The new unknown fallback can reduce false assignments for overflow but does not solve native over-fragmentation or mixed-speaker ASR chunks.
-- Additional manual speaker-name workflow review confirmed an actual gap and patched it without inventing speaker numbers. The speakerless/locked state survives exports by design, but needs actual renderer and persistence test execution.
-- Do not alter native thresholds, force five speakers, replace Orukeet or reopen known-good timestamps/AirPods capture without contrary real evidence.
+- The revised confidence-or-unassigned algorithm may prevent some false attributions; the Windows test gate establishes code viability, **not real-world voice accuracy**.
+- New overlay should reduce frozen-app uncertainty during long diarization; its stage order and note isolation have only unit-level evidence, so test real success, skip and failure before acceptance.
+- Previous temp PCM is deleted on completion, so existing source audio cannot be used to reprocess notes; retaining/replaying audio (Decision 0007) is a critical follow-on. Do not silently store private recordings outside retention settings or add another mandatory manual replay loop.
+- Deliberate exclusions remain: no automatic fallback from a user-selected device, no paid-feature entitlement claims, no uncalibrated native threshold changes, no customer vocabulary/public speech in GitHub.
 
 ## Next Action / Test
 
-**Active work ID:** `OW-SPK-UNKNOWN-VALIDATE-20261030`
-**Action:** [OW-SPK-UNKNOWN-VALIDATE-20261030] Run the one-command native Windows gate (`npm run verify:meeting-speakers`) on the refreshed branch, then correct any actual failures before a real recording benchmark.
+**Active work ID:** `OW-REAL-PROGRESS-20261030`
+**Action:** [OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
 
-1. Download the **latest** ZIP for `fix/meeting-auto-speaker-discovery-20261029` into a fresh folder (the previous October 30 extracted ZIP predates the newer code), then open the folder containing `package.json` in **x64 Native Tools Command Prompt for VS**.
-2. If fresh, install dependencies once with `npm ci`. This also restores `tsx` and React test dependencies. Do not run `npm start` or re-record Teams yet.
-3. Run just **one command**:
+1. Obtain the **updated** working branch code on the Windows laptop (earlier extracted ZIP predates this progress feature). Run `npm ci` only in a fresh extraction where dependencies are absent. Run `npm run verify:meeting-speakers` in the folder containing `package.json`; this runs the previous 26 suites **plus two new progress suites**, typecheck and renderer build without GitHub Actions.
+2. If green, launch with `npm start` and make **one** same-excerpt Teams recording using the known-good AirPods Pro output and Orukeet, automatic diarization enabled. Verify the note-scoped overlay shows preparing / clustering / matching / saving with increasing elapsed time and ends after saved transcript, without fake percentages.
+3. Compare the actual resultant speaker labels and Unknown Speaker rows against the previously provided private Teams reference; capture anonymized `Post-meeting...` audit metrics and private new transcript once. If native process fails, check failure/skip state and transcript preservation.
+4. Keep proposed speaker decisions provisional until real labels are more accurate. Only after this evidence, prioritize Decision 0007 source-audio retention/re-diarization and the rest of the complete application acceptance gates.
 
-```cmd
-npm run verify:meeting-speakers
-```
+**Validated now:** Source implementations committed and six isolated reducer checks passed. **Not yet verified:** Updated native Windows 28-suite gate, React UI, real progress events, new speaker-accuracy benchmark.
 
-4. The script runs 26 native Node/tsx regression files (speaker/locked/unknown, backend diarization, UI, note merge, exports), then the real `npm run typecheck` and `npm run build:renderer`; it stops and exits nonzero on the first failing stage, showing the original error. No GitHub Actions or paid cloud minutes needed.
-5. If all stages pass, run the same original Teams excerpt once to judge actual speaker identity and `unassignedNativeClusters`; no further manual audio replay before the build gate.
-
-**Validation achieved here:** 81/81 actual GitHub source/test bodies passed under a limited V8 shim; the command-orchestration logic and all referenced test paths passed source/mock checks. **Full native app build and real speaker accuracy remain unverified** until step 3 and subsequent controlled replay.
 ## Regression Checks
 
-- Existing fallback for user-selected/saved speaker totals stays unchanged; auto-system unknown handling must not fabricate numbered speaker IDs or overwrite named/locked rows.
-- Anonymous nine-cluster native-to-transcript test protects preservation of each word and conservative unknown status when embeddings are absent.
-- Native validation command includes actual renderer SSR and DOM tests for unknown/locked labels, re-selection and distinct colors, plus note merge/export tests; these have **not yet executed in native Node** and may reveal errors that need correcting.
-- Export tests must continue counting identified people independently of unknown lines and show manually assigned names correctly across TXT, SRT, Markdown and JSON.
-- Preserve October 28 timestamp fixes, mic/system separation, Windows AirPods output, Orukeet corrections and profile reconciliation.
-- Remaining work includes speaker accuracy acceptance, progress overlay (0006), retained-source re-diarization (0007) and global rename everywhere; nothing in this patch proves them resolved.
+- Earlier Windows gate passed 245/249 tests with four skipped. New code must re-pass actual typecheck and renderer build; no silent regression to Orukeet transcription, AirPods endpoint selection, mic/system separation or speaker timestamps.
+- Progress event delivery must never abort diarization; the failed/disabled/model-unavailable paths must preserve original transcript and report terminal status.
+- Progress must be tied to both session and note; stale or cross-note events cannot overwrite a current job. Main must not claim saved state; only after renderer persistence may status become success.
+- Existing `ActionProcessingOverlay` must keep precedence. Failed progress remains dismissible, success/skip auto-dismiss; no unimplemented Cancel button and no invented percentages.
+- Speaker clusters, manual locks and exports retain the previously established conservative unknown-over-false-label policy. Audio retention/rerun is still missing, not silently assumed to work.
+- The new source may require another Windows run; do not count previous 245 passing tests as validation of code committed afterward.
 
 ## Immediate Branches
 
-- Windows tests/typecheck/renderer pass -> compare same Teams excerpt once and inspect whether weak groups become unknown instead of falsely being named; assess actual voice accuracy rather than only number of labels.
-- Test fails in UI/serialization -> patch the exact transition with a regression; do not change acoustic thresholds as a workaround.
-- Unknown fallback causes excessive manual review -> evaluate confidence evidence and identity grouping while preserving Decision 0003's conservative policy, without assuming same-speaker cosine thresholds are calibrated.
-- New mic-mode/in-person false matches -> keep that as a distinct validated policy change; the current path is system-auto only.
+- Updated Windows suite/build passes -> run one real Teams benchmark and evaluate speaker accuracy and progress UI together.
+- Native test/typecheck fails -> fix the exact regression, keeping capture/transcription/locked speakers intact; do not bypass the gate.
+- Overlay freezes or shows success before save -> trace note/session events and main/store serialization; update focused tests.
+- Real speaker identity still fails -> use the private reference to fix a measured upstream clustering/alignment issue, not arbitrary voice-count or similarity thresholds.
+- Real speaker identity improves -> move into retained-audio and non-destructive post-meeting re-diarization, then wider installed-app/end-to-end reliability testing.
 
 ## Blockers / Needed Inputs
 
-- Source and tests are committed and read-back verified on GitHub. **81/81 pure-JS GitHub source tests** passed in isolated V8, and the one-command native verification launcher passed static/mock control tests. Container GitHub DNS remains unavailable for a full npm checkout; **native Windows test, TS check, renderer build and actual recorded speaker accuracy are still unverified**.
-- No more user's audio/transcript input is needed before running the focused Windows code checks. GitHub Actions is not used.
-- The current public repository has only anonymous synthetic tests/numeric diagnostics. Private Teams source files, participant identities and customer vocabulary remain off GitHub.
+- This environment can read/update GitHub source but cannot execute Electron/Windows audio or run the actual Teams recording; real benchmark remains dependent on one Windows replay using the user's existing reference file.
+- Updated native Windows tests/renderer build are unexecuted after new progress changes; six isolated reducer tests passed. Earlier prior-build Windows run: 245 passed, four skipped, no failures.
+- User has already supplied the Teams reference in previous conversation context; do not request it again. Do not write private transcripts, names or recordings to GitHub.
+- GitHub Actions minutes are not needed. The current project state uses existing legacy paired records, not a new duplicate project checkpoint.
 
