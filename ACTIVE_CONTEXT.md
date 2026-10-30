@@ -1,6 +1,6 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
-**Last updated:** 2026-10-30 - progress overlay implemented; re-diarization from retained audio prioritized over another manual replay
+**Last updated:** 2026-10-30 - stage overlay committed; 9/9 native Node filesystem archive tests pass; live retention still pending
 **Current milestone:** Enable non-destructive speaker reprocessing from retained meeting audio
 **Active work ID:** `OW-AUDIO-RERUN-20261030`
 **Canonical next action:** Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
@@ -26,7 +26,8 @@ The original requirement is not just passing diarization tests: it is a dependab
 - Accepted Decision 0006 now has code: main stage events `preparing`, `clustering`, `matching`, `saving`, terminal skipped/failed; preload/type bridge, module-scoped progress map keyed by note/session, success only after transcript persistence, note-editor overlay showing actual stages and elapsed time with no fabricated percent. Action overlays retain precedence; no unsafe native cancellation.
 - New `meetingDiarizationProgress.test.js` has six cases; the exact GitHub TS reducer (type-only syntax removed) passed **6/6** in an isolated V8 test harness. Existing post-stop mock tests updated to filter progress vs completion; three new IPC stage tests and three renderer SSR tests committed but **not yet run in native Windows/React**.
 - Added the two new progress test files to `npm run verify:meeting-speakers` (now 28 files). Current source files and decisions were fetched directly from the connected GitHub repo. No confidential audio/transcript data written to public GitHub.
-- Accepted Decision 0007 (retain mic/system audio and non-destructive re-diarization) remains **unimplemented**. Further outstanding items: global rename, clean installer, output devices besides AirPods, long-meeting technical ASR accuracy and normal daily-use performance.
+- **Decision 0007 implementation foundation:** New `src/helpers/meetingAudioArchive.js` atomically copies already-closed PCM to a private note/session/source archive, records each track's 24 kHz mono sample format, capture start and size, avoids original deletion and prevents duplicate publication; same-note mic/system operations serialize and note-specific deletion helper exists. `test/helpers/meetingAudioArchive.test.js` contains nine synthetic OS filesystem tests. **9/9 passed in native Node v22.16.0 on Linux using exact GitHub source and test blobs, both confirmed byte-for-byte by matching Git blob SHA**. Added test to `npm run verify:meeting-speakers`, now **29 files**. This component is intentionally **NOT wired to live capture**: privacy/retention, current-note authorization, note/account deletion, Win32 filesystem semantics, audio re-diarization UI and undo remain unimplemented.
+- Older temp PCM is still deleted post-diarization and mic capture is discarded as soon as system audio becomes audible. No previously lost audio has been restored. Further outstanding items: global rename, clean installer, non-AirPods routes, technical ASR accuracy and daily-use performance.
 
 ## Current Hypothesis or Decision Point
 
@@ -40,7 +41,7 @@ The original requirement is not just passing diarization tests: it is a dependab
 **Active work ID:** `OW-AUDIO-RERUN-20261030`
 **Action:** [OW-AUDIO-RERUN-20261030] Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
 
-1. Design private note/session-owned source storage under the app's local data directory with appropriate filesystem permissions, lifetime/retention behavior and cleanup on note/account deletion. Preserve track timestamps, source identity and multiple resumed recording sessions; never publish raw recordings or vocabulary to GitHub.
+1. **Foundation completed and native-tested:** private note/session/source PCM archive helper with timestamps, dual tracks, duplicate-write exclusion and note-specific deletion (9/9 exact-source Node/Linux tests). NEXT: integrate it with the **resolved** user-data-retention/audio-retention preferences, note ownership/tombstone checks and cleanup on note/account deletion before enabling persistent recording. Never publish private audio/vocabulary to GitHub.
 2. Stop deleting/discarding the only available recorded mic/system data until an approved local archival copy has been secured. Preserve current selected AirPods output, mic/system routing, Orukeet ASR and post-stop audio conversion as independent known-good workflows.
 3. Add a post-meeting `Re-run speaker identification` operation that reads only the authorized retained audio for its note, accepts an updated automatic/manual speaker-count policy, leaves raw transcript text, notes, corrections and summaries intact, and preserves or explicitly reconciles user locks. Add a previous-label restore/undo path and enforce request/session ownership.
 4. Integrate genuine progress stages with the new overlay and cover success, skip, unavailable/missing audio, crash/restart, stale note, concurrent/resumed sessions and deletion/retention. Re-run full focused native tests, TypeScript and renderer build once this candidate is ready.
@@ -69,6 +70,6 @@ The original requirement is not just passing diarization tests: it is a dependab
 
 - Connected GitHub source is writable and has been updated with the progress overlay; the previous Windows 245-pass gate predates these latest commits. The progress state logic passed six isolated source tests, while the actual renderer/main integration and UI remain unverified.
 - The model cannot drive the user's Windows audio device from this chat. Source retention and reprocessing can be developed and tested with synthetic fixtures before requesting one real Teams validation.
-- Existing temporary raw PCM is deleted after old recordings, so prior notes cannot be reprocessed unless their audio was independently saved. Do not claim recovery of files that were never retained.
+- Existing temporary raw PCM is deleted after old recordings, so prior notes cannot be reprocessed unless their audio was independently saved. The new archive helper is **not active in live recordings** yet. Native Node v22 filesystem tests of its exact GitHub source passed 9/9 on Linux; no Windows archive or reprocessing proof yet.
 - Decision 0007 is Accepted as a requirement; implementation remains pending. No GitHub Actions minutes and no sensitive meeting data in public source.
 
