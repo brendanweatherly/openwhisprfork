@@ -1,7 +1,7 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
-**Last reconciled:** 2026-10-30 (holistic priority reset: retain audio before further repeated Teams replay)
-**State confidence:** User's previous Windows gate passed 245/249 tests (four skipped, zero failures), typecheck and renderer build; this was BEFORE the newly committed progress-overlay code. Stage-aware main IPC, preload, typed renderer store, note overlay and English labels are now committed, but only the six isolated TS-reducer tests (converted to JS for V8) were executed and passed. New native Windows tests/build, progress-UI interaction, and real Teams speaker-identity accuracy are NOT YET VERIFIED. Original real replay still failed attribution.
+**Last reconciled:** 2026-10-30 (stage overlay committed; private source archive foundation passes 9/9 native Node tests)
+**State confidence:** Prior Windows-focused speaker gate passed 245/249 tests (four skipped, zero failures), TypeScript and renderer build. Since then, stage-aware progress overlay code was committed (6/6 exact reducer cases passed in an isolated V8 test runner; updated React/Windows stage tests still pending). A private note/session PCM archive foundation is now committed; exact-source/native Node v22 Linux filesystem tests passed 9/9 and both tested files' Git blob hashes matched the branch. Archive is **not wired to capture** and re-diarization is **not implemented**; privacy/retention integration and Windows/real Teams acceptance remain pending. Older real speaker benchmark failed attribution.
 **Current milestone:** Enable non-destructive speaker reprocessing from retained meeting audio
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
@@ -110,7 +110,7 @@ Meeting detection/start
 | `decisions/0004-orukeet-post-decode-corrections.md` | Accepted current behavior | Device-local explicit substitutions | ASR interface changes |
 | `decisions/0005-final-diarization-speaker-count-policy.md` | **Proposed / real replay failed** | Native auto-discovery and voice-aware overflow remapping executed but did not produce stable real speakers; some clusters lack centroids | Require evidence-driven fix and successful repeat replay before promotion |
 | `decisions/0006-diarization-progress-visibility.md` | **Accepted requirement; code committed, native/live validation pending** | Visible post-stop progress overlay with genuine stage updates and clear terminal states | Only if user changes the requested UX |
-| `decisions/0007-retained-audio-rediarization.md` | **Accepted requirement; implementation pending** | Preserve local mic/system audio and re-run speaker identification from retained audio while protecting original transcript/corrections/locks | Only if user changes the reprocessing workflow requirement |
+| `decisions/0007-retained-audio-rediarization.md` | **Accepted requirement; archive foundation tested, full implementation pending** | Retain local mic/system audio and safely re-run identification without changing reviewed transcript/locks; isolated archive helper passes 9/9 native Linux filesystem tests | Only if user changes the reprocessing workflow requirement |
 | `decisions/0008-mutual-high-confidence-precap-grouping.md` | **Proposed / implemented for validation** | Auto-only mutual-nearest, strong-evidence coalescence before the seven-cluster cap; never force a pair to satisfy a target count | Full tests and matched real Teams evidence show false joins, poor quality or unacceptable latency |
 | `decisions/0009-confidence-or-unassigned-automatic-overflow.md` | **Proposed / implemented for validation** | System-track automatic overflow without a trustworthy voice match becomes an editable unassigned transcript line, not a false existing speaker; locks and transcript words are preserved | Windows/real evidence shows data loss, false identities, manual review failure or another better strategy |
 
@@ -123,6 +123,7 @@ Meeting detection/start
 - Seven retained native speaker groups are still not guaranteed to represent seven people. The proposed high-confidence pre-cap grouping (Decision 0008) and aggregated turn matching need real validation.
 - Unassigned acoustic clusters lose automatic cross-line identity continuity; a word-level ASR chunk covering two people remains ambiguous. Do not claim overall speaker accuracy is solved.
 - Before another user Teams playback, run the full focused Windows regressions/typecheck/renderer build. No GitHub Actions minutes should be spent. Decisions 0006 and 0007 (progress overlay and re-diarization from retained audio) remain accepted pending features.
+- A new `meetingAudioArchive.js` private archive primitive isolates note/session/track PCM and prevents duplicate overwrites, with 9/9 native Linux Node tests. **Not yet active in production:** the stop pipeline still deletes original temp PCM and drops mic audio early on calls. Enforce resolved retention settings, authorized note ownership and deletion/cleanup before wiring it to recording.
 - Keep customer audio, participant names, confidential transcription and local vocabulary out of the public GitHub repo.
 
 ## 9. Current Priority Order
@@ -139,7 +140,7 @@ Meeting detection/start
 - Active work ID: `OW-AUDIO-RERUN-20261030`
 - Current target: [OW-AUDIO-RERUN-20261030] Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: Previous focused Windows tests/typecheck/renderer passed (245 pass, four skipped) on the speaker candidate, but not on this turn's committed progress overlay. Six pure progress-reducer checks passed in isolation; full new native/real overlay checks pending. The upstream daily-use blocker is **source PCM deletion after diarization**, preventing non-destructive reruns and forcing repeated user recording. Preserve the Oct. 28 working capture baseline while implementing Decision 0007.
+- Current status: Previous focused Windows tests/typecheck/renderer passed (245 pass, four skipped) on the speaker candidate, but not on this turn's committed progress overlay. Six pure progress-reducer checks passed in isolation; full new native/real overlay checks pending. The upstream daily-use blocker is **source PCM deletion after diarization**, preventing non-destructive reruns and forcing repeated recordings. A tested private archive primitive now exists (9/9 exact-source native Node/Linux tests); it is deliberately **not wired to live capture** until retention/account deletion can be protected. Preserve the Oct. 28 baseline while completing Decision 0007.
 
 ## 11. Recent Material State Changes
 
@@ -156,6 +157,7 @@ Meeting detection/start
 | One-command local speaker verification | `scripts/verify-meeting-speakers.js` (`60a56bf`) and package script (`9f4a074`); 26 referenced test files exist; success, failure, missing-dependency and Windows cmd paths exercised in mocked runner | **USER-VERIFIED native Windows PASS: 245 tests passed, 4 skipped, 0 failed, TypeScript and renderer build passed; real-audio result pending. No GitHub Actions** |
 | First v2 pilot state audit | Old current sections conflicted with appended event | Reconciled current sections; event moved to `history/`; decision 0005 created |
 | Visible diarization progress overlay | Main pipeline stage IPC, preload/type bridge, note-scoped store, overlay, English labels and regression fixtures committed | **Accepted requirement implemented for validation; 6/6 isolated reducer cases pass, native Windows/real UI still untested (Decision 0006)** |
+| Private raw meeting-audio archive foundation | `meetingAudioArchive.js` plus nine-file-system-case regression; original Git blob hashes matched locally under Node 22 | **9/9 native Node/Linux tests passed; note/session segregated, dual track, duplicate and symlink protections. Not wired to capture, retention or re-diarization; Win32 untested. Decision 0007 still pending.** |
 
 ## 12. Open Risks / Regression Watchlist
 
@@ -173,5 +175,5 @@ Meeting detection/start
 **Active work ID:** `OW-AUDIO-RERUN-20261030`
 **Next:** [OW-AUDIO-RERUN-20261030] Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
 **Why:** Real speaker attribution still lacks matched evidence, but asking the user to replay Teams repeatedly is an avoidable burden and won't support iterative fixes. The current post-stop pipeline deletes temporary raw PCM and can drop the mic track after system audio becomes audible. Preserving original tracks with note/session ownership and compliant deletion is the critical prerequisite for re-running speakers safely. This work is explicitly accepted as Decision 0007.
-**It should prove:** After a saved meeting, both applicable local audio sources survive per user retention policy; the user can re-run speaker identification with a new count without re-recording or rerunning ASR. Existing words, summaries, manual locks and earlier label versions remain recoverable; deleted notes do not retain orphaned audio.
+**It should prove:** The already-tested private archive is safely integrated into capture and note lifecycle, both relevant tracks survive according to resolved user retention policy, and a note can be re-diarized with a revised count without re-recording or rerunning ASR. Existing words/summaries/manual locks remain intact; deletion leaves no orphaned private source.
 **Afterwards:** Re-run the expanded native Windows verification, test the new progress overlay, then perform one matched real Teams benchmark and repeat diarization locally without further recording. Maintain Decisions 0005/0008/0009 as Proposed until accurate speaker identity is proven.
