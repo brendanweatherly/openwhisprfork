@@ -1,12 +1,12 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
-**Last reconciled:** 2026-10-30 (after 17-cluster diagnostic replay and narrow alignment correction)
-**State confidence:** Latest diagnostic replay directly evidenced 17 native clusters, 4 unsupported joins and 30/59 mixed acoustic windows; private transcript confirms incorrect labels. A narrow aggregate-overlap correction and synthetic tests are committed; 7 isolated Node checks passed, but the updated full Windows regression suite/build and a corrected real replay have not run.
-**Current milestone:** Validate aggregated speaker overlap and resolve unsupported native speaker merges
+**Last reconciled:** 2026-10-30 (conservative native-grouping trial committed after replay analysis)
+**State confidence:** Third real Teams replay directly evidenced 17 native clusters, four unsupported joins, and 30/59 mixed acoustic windows. Aggregate overlap and high-confidence pre-cap coalescence are committed; eight new exact pure-module Node tests passed in a local harness using the existing threshold constants. Updated complete Windows regression/typecheck/renderer build and a real replay of these commits have not run.
+**Current milestone:** Safely handle remaining automatic speaker overflow without false attribution
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
-**Active work ID:** `OW-SPK-ALIGN-20261030`
-**Canonical next action:** Verify the new overlap-vote regression tests, then design an evidence-gated alternative to blind speaker joins before another real recording.
+**Active work ID:** `OW-SPK-UNKNOWN-20261030`
+**Canonical next action:** Implement a non-destructive unassigned-speaker fallback for unsupported automatic overflow, with renderer, export and user-lock regression tests.
 **Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
@@ -90,17 +90,15 @@ Meeting detection/start
 
 | Type | Item | Evidence / next proof |
 |---|---|---|
-| Confirmed latest run | 17 native acoustic clusters, 81 acoustic turns, seven final IDs, 13 usable cluster embeddings, 10 remaps, 59 transcript chunks and zero automatic names. | User-supplied third diagnostic run. Same audio source type as previous trials; label quality remains failed. |
-| Confirmed blind merges | Four extra clusters had no usable embedding and were merged into the longest retained cluster with no similarity score. Their combined speech lasted **4.95 s / 245.84 s (~2%)**. | `capRemapDiagnostics` entries with `similarity:null`; a real risk, but too little duration to explain pervasive attribution error alone. |
-| Confirmed uncalibrated merges | Six centroid-supported remaps used similarity values ranging **0.451–0.795**. | Log; a nearest neighbor is not automatically the same person. No validated similarity threshold for this meeting audio. |
-| Confirmed native over-fragmentation | 17 initial clusters for a conversation containing considerably fewer actual voices, while the cap always keeps the seven longest source clusters separate. | Log, source `capSpeakerClustersByVoice`, and private transcript. Automatic seven labels cannot consolidate two kept fragments of one actual person. |
-| Confirmed transcript conflict | **30/59** transcript chunks intersect multiple final acoustic groups; **13/59** have no dominant group reaching 70% of summed overlap. A single placeholder label is used for two distinct self-introductions. | Latest numeric log plus private exported transcript; these counts are not ground-truth speaker accuracy by themselves. |
-| Confirmed original alignment limitation | `mergeWithTranscript` previously chose one *largest individual acoustic turn* for the entire text chunk, even when another final speaker collectively owned more of the time. | Exact source review and an anonymous interleaved A/B/A synthetic fixture. |
-| Committed corrective trial | `diarization.js` now sums overlaps across all turns per final speaker (`07cd6ae`); two tests check aggregation and user locks (`9d031ff`). Diagnostic summary adds `aggregateVoteDiffersFromSingleTurn` (`18fec36`, tests `88ed480`, `4e391be`). | Seven equivalent isolated Node checks passed. Full Windows suite/typecheck/build **not run** on new patch; no live replay validation yet. |
-| Residual uncertainty | A single multi-second ASR chunk can contain words from multiple people, so aggregated overlap still cannot split or accurately attribute every word. | Add separate confidence/unknown or word-alignment solution only with testing; do not force real people into one label. |
-| Known-good baseline | AirPods system capture, local Orukeet, prior timestamp fixes, speaker locks and user corrections remain required. | No new source/ASR change in this turn; regression still required before promoting patch. |
-| Pending user requirements | Stage-aware diarization progress overlay and retained-audio post-meeting reprocessing. | Decisions 0006 and 0007 accepted, implementation still pending; repeated external replay is an acknowledged workflow cost. |
-| Interpretation | `namedSegments=0` indicates no automatic names were accepted, rather than failed speaker discovery. | Avoid guessing names from the participant list. |
+| Direct real replay | Most recent 5-minute sample had 17 native acoustic groups, 81 turns, 7 final labels, 13 centroids, and 10 remaps. Four remaps with no embeddings were assigned to the dominant group. | User log. The missing-embedding groups held 4.95s (~2%) of detected speech. |
+| Direct transcript comparison | 30 of 59 ASR chunks intersected multiple final acoustic groups; 13 had no 70%-dominant group. Different real participants shared final labels and the same participant could be fragmented. | User private Teams/OpenWhispr reference; no confidential speech committed. |
+| Previously committed correction | `diarization.js` uses total overlap per final speaker rather than largest individual acoustic turn. | `07cd6ae` and regression `9d031ff`; previous isolated checks passed; full Windows suite after patch not run. |
+| New conservative pre-cap candidate | `conservativeSpeakerGrouping.js` compares *all* native groups with embeddings before the auto cap; a pair must be reciprocal best, exceed existing live recluster similarity 0.93, beat competing voice by existing 0.10 margin, have two speech turns each, and not overlap in time. It performs only disjoint one-pass merges. | Helper `0b2816f`, safety change `7f6cc24`, tests `87e6329` and `af6fd38`, main IPC integration `160aa0d`. All **8** isolated synthetic helper tests passed under Node 22. Windows integration and live accuracy not established. |
+| Protection | A one-turn group may **veto** a pair by providing competing similarity evidence even though it cannot itself be merged; under-identified user counts retain their current saved/explicit handling. | Test covers ambiguous one-turn distractor; source only invokes pre-cap in `countSource="auto"` when raw clusters exceed cap. |
+| Residual known defect | After a high-confidence pass, the existing cap may still blindly attach centroids-missing or weakly matched excess clusters to retained voices; the pre-cap change is **not** a solution for those errors. | Existing `capSpeakerClustersByVoice` and the prior 10-remap log with low/unknown scores. |
+| Next architecture dependency | Unmergeable clusters need a reviewable unassigned state rather than fabricated speaker identity. This requires consistent frontend display, note persistence, exports, and respect for user locks. | Decision 0003 prioritizes uncertainty over false identities; implementation remains open and proposed. |
+| Continuing requirements | Progress overlay and re-diarization from retained source audio must remain in scope. | Decisions 0006 and 0007 accepted, neither implemented. |
+| Unknown | Whether the new high-confidence pre-cap step identifies real duplicate native clusters in the same Teams recording, and whether sufficient pairs ever meet the strict gate. | `confidentPreCapMergeCount` and `confidentPreCapMerges` numeric-only logs on the next **consolidated** user replay. |
 
 ## 7. Current Decisions
 
@@ -113,32 +111,33 @@ Meeting detection/start
 | `decisions/0005-final-diarization-speaker-count-policy.md` | **Proposed / real replay failed** | Native auto-discovery and voice-aware overflow remapping executed but did not produce stable real speakers; some clusters lack centroids | Require evidence-driven fix and successful repeat replay before promotion |
 | `decisions/0006-diarization-progress-visibility.md` | **Accepted requirement; implementation pending** | Visible post-stop progress overlay with genuine stage updates and clear terminal states | Only if user changes the requested UX |
 | `decisions/0007-retained-audio-rediarization.md` | **Accepted requirement; implementation pending** | Preserve local mic/system audio and re-run speaker identification from retained audio while protecting original transcript/corrections/locks | Only if user changes the reprocessing workflow requirement |
+| `decisions/0008-mutual-high-confidence-precap-grouping.md` | **Proposed / implemented for validation** | Auto-only mutual-nearest, strong-evidence coalescence before the seven-cluster cap; never force a pair to satisfy a target count | Full tests and matched real Teams evidence show false joins, poor quality or unacceptable latency |
 
 ## 8. Dependencies
 
-- Upstream speaker clustering remains problematic; do not call the narrow transcript overlap-vote fix a complete diarization correction.
-- The automatic seven-speaker ceiling always protects seven longest-duration native groups, even when some are duplicates of the same person; adjusting that needs a calibrated, evidence-gated policy rather than simply removing the cap or forcing a smaller count.
-- Four unsupported remaps (4.95 seconds total) must be addressed conservatively, but their short duration does not explain all label errors. Similarity scores for six supported remaps lack a validated same-speaker cutoff.
-- The A/B/A transcript-overlap fix changes the final label only when a speaker's total acoustic time outweighs another speaker's longest single turn. It must preserve text, corrected timestamps, manually locked speaker identities, Orukeet and separate system/mic audio.
-- Audio-word alignment remains coarser than true speaker boundaries. Explicit uncertainty handling for balanced chunks requires UI/persistence/export review before implementing it.
-- Retained source-audio re-diarization and visible processing progress (Decisions 0007 and 0006) remain accepted and should precede further routine user replay cycles where practical.
-- Keep real meeting names, words, customer context and recordings out of the public repository; only anonymous synthetic fixtures and numeric-only diagnostics are committed.
+- Preserve Windows selected AirPods/system capture, mic/system separation, Orukeet corrections, timestamps, live-name reconciliation and user speaker locks. No changes to these components in the new pre-cap patch.
+- The new pre-cap pass uses **existing** project confidence thresholds and is enabled only for automatic counts when raw speakers exceed the cap. Saved and explicit user counts keep the previous path.
+- The new pass can merge duplicates *among the seven largest native groups*, previously impossible; only high-evidence mutual nearest pairs qualify. **Do not** assume the pass runs in a given recording or produces correct identities until validation.
+- The existing seven-speaker overflow cap still forcibly maps weak or centroid-missing clusters to retained groups. The next correction must preserve transcript text while representing unknown speaker provenance throughout UI/persistence/export without overriding manual locks.
+- Balanced multi-speaker ASR chunks remain impossible to word-attribute without finer timestamps; do not claim summed overlap solves this.
+- Avoid another user Teams playback until a more complete candidate and targeted Windows tests are ready. User has already provided adequate failure evidence.
+- Accepted progress overlay (Decision 0006) and retained-audio re-diarization (Decision 0007) remain downstream requirements. Keep customer audio/transcripts out of public GitHub.
 
 ## 9. Current Priority Order
 
-1. [OW-SPK-ALIGN-20261030] Verify the new overlap-vote regression tests, then design an evidence-gated alternative to blind speaker joins before another real recording.
-2. Address the upstream seven-retained-clusters policy using calibrated centroid evidence and a conservative no-evidence/ambiguous outcome rather than another blind forced assignment.
-3. Rerun full speaker regressions/typecheck and compare the same known Teams excerpt **only after** meaningful algorithm improvements; preserve manual locks and timestamps.
-4. Implement stage-aware diarization progress overlay (Decision 0006) and retained-audio re-diarization (Decision 0007), reducing repeated playback burden.
-5. Resolve global rename, Windows installer and real live mic/system reliability after the speaker-correctness gate.
+1. [OW-SPK-UNKNOWN-20261030] Implement a non-destructive unassigned-speaker fallback for unsupported automatic overflow, with renderer, export and user-lock regression tests.
+2. Validate pre-cap grouping (`8` isolated passing tests), overlap-vote and unknown-handling code with the focused Windows test suite, typecheck and renderer build before another actual audio replay.
+3. Compare the same reference recording once, including `confidentPreCapMergeCount`, remap similarity, unassigned segments and actual stable speaker assignments; keep policy Decisions 0005 and 0008 proposed until then.
+4. Implement stage-aware diarization progress overlay and retained-audio re-diarization, avoiding repeated external playback in daily use.
+5. Complete global rename, source-audio retention, mic/system isolation and installer checks after core attribution is trustworthy.
 
 ## 10. Current Focus
 
 - Active context: `ACTIVE_CONTEXT.md`
-- Active work ID: `OW-SPK-ALIGN-20261030`
-- Current target: [OW-SPK-ALIGN-20261030] Verify the new overlap-vote regression tests, then design an evidence-gated alternative to blind speaker joins before another real recording.
+- Active work ID: `OW-SPK-UNKNOWN-20261030`
+- Current target: [OW-SPK-UNKNOWN-20261030] Implement a non-destructive unassigned-speaker fallback for unsupported automatic overflow, with renderer, export and user-lock regression tests.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: Third real diagnostic run **completed**. Voice labels still incorrect with 17 raw clusters / 7 final, 4 no-embedding forced joins, and 30/59 overlapping text windows. Aggregated-per-speaker chunk attribution and numeric disagreement diagnostic have now been committed. Only isolated pure checks passed; full Windows suite/real corrected playback still pending.
+- Current status: Conservative pre-cap grouping is **committed** and eight synthetic pure-module Node tests passed. The IPC path uses it in auto mode only when native clusters exceed the cap. Full Windows regression/build and a real recording on this code are **unverified**. Weak and missing-embedding joins still remain in the ordinary overflow cap.
 
 ## 11. Recent Material State Changes
 
@@ -150,27 +149,28 @@ Meeting detection/start
 | Automatic cluster discovery + voice-aware cap trial | Three real trials still show wrong labels; latest: 17 raw -> 7 final, 4 missing embedding joins | **Real speaker-accuracy acceptance failed; Decision 0005 remains proposed** |
 | Numeric-only native/centroid/overlap diagnostics | Latest Windows replay emitted all diagnostic events: 17 clusters; remap and overlap totals received | **Diagnostics operating in real app; no content committed** |
 | Aggregated speaker-overlap correction | Code `07cd6ae`, regression `9d031ff`; audit counter `18fec36` and tests `88ed480`, `4e391be` | **Committed; seven isolated Node checks passed, full Windows/regression and real replay not run** |
+| Mutual high-confidence native pre-cap grouping | Pure helper `0b2816f` / `7f6cc24`, eight tests `87e6329` / `af6fd38`; main IPC `160aa0d` | **Candidate committed; 8/8 local synthetic checks passed, not Windows/live-validated; Decision 0008 Proposed** |
 | First v2 pilot state audit | Old current sections conflicted with appended event | Reconciled current sections; event moved to `history/`; decision 0005 created |
 | Visible diarization progress overlay | User-requested requirement, Decision 0006 recorded | **Pending design/implementation**; tiny finalizing pill is insufficient |
 
 ## 12. Open Risks / Regression Watchlist
 
-- Third real trial still merges and splits people despite voice-similarity routing. A fixed seven-retained-cluster policy can preserve duplicate speakers and still mix separate ones.
-- Four blind no-embedding remaps lasted 4.95 s (2% of detected speech); the other six centroid remaps used similarities 0.451-0.795 without a calibrated same-voice threshold.
-- 30 of 59 ASR text windows cover multiple final speaker IDs, 13 materially balanced. Aggregating acoustic duration per speaker may fix a subset, but cannot separate two people's words in a single chunk.
-- New alignment and diagnostic code have not passed full Windows tests or real replay; only isolated equivalents passed. Do not promote the branch or accept Decision 0005 until field accuracy improves.
-- Preserve known-good Windows AirPods capture, Orukeet corrections, October 28 timestamps, manually locked speakers, existing note content and prior speaker reconciliation tests.
-- User expects full diarization progress overlay and re-run speaker identification from retained audio. Both are still open, and further repeated manual playback is costly.
-- Existing fresh-checkout setup issues were resolved via `npm ci` and `npm run build:renderer`; streamlined first-run tooling remains separate, not a blocker now.
-- No meeting audio or identifying customer transcript text in public GitHub.
+- Three real recordings still showed incorrect diarization before this latest pre-cap code; no new benchmark proves the issue fixed.
+- The pre-cap pass only merges existing mutually matching pairs at the already defined live-recluster similarity 0.93 and 0.10 runner-up gap; it may legitimately make **zero** merges in noisy real meetings, which is preferable to an unsupported join.
+- The user-set/saved count path is intentionally unchanged; regression tests must ensure explicit count precedence, speaker-index uniqueness, profile reconciliation and manually locked names.
+- The remaining overflow cap still maps weakly similar and centroid-missing extra clusters onto existing speakers, which can misattribute statements. Unknown/provisional UI behavior requires careful review before changing this.
+- The ASR chunk may contain words from more than one real speaker. The summed-overlap patch does not split words or establish ground-truth identity.
+- Existing Windows AirPods capture, Orukeet, fixed timestamps and customer-specific corrections are known-good; avoid collateral changes.
+- Full new Windows regression/build, installation and real validation are not run; GitHub Actions minutes must not be used.
+- User expects stage-aware diarization overlay and retained-audio rerun with no repeat meeting playback. Those user requirements remain accepted, not implemented.
 
 ## 13. Next Best Step
 
-**Active work ID:** `OW-SPK-ALIGN-20261030`
-**Next:** [OW-SPK-ALIGN-20261030] Verify the new overlap-vote regression tests, then design an evidence-gated alternative to blind speaker joins before another real recording.
-**Why:** The new real data confirms not one but two architectural limits: keeping seven arbitrary native voice groups even if they include duplicates, and choosing the largest single acoustic turn for ASR chunks. The second error has a narrow isolated code correction; the first still needs evidence-gated grouping that avoids unsupported joins.
-**It should prove:** The revised alignment tests and existing speaker regressions remain green without changing transcript words, manual locks or timestamps. Before requesting another audio replay, add a testable policy to handle missing embeddings and duplicates among the seven retained native groups; measure whether new labels become more stable, not merely fewer.
-**Remaining:** Actual Windows integration test of new code, genuine speaker accuracy benchmark, progress overlay and retained-audio reprocessing.
+**Active work ID:** `OW-SPK-UNKNOWN-20261030`
+**Next:** [OW-SPK-UNKNOWN-20261030] Implement a non-destructive unassigned-speaker fallback for unsupported automatic overflow, with renderer, export and user-lock regression tests.
+**Why:** Conservative high-confidence grouping can now consider two duplicated native groups even when both were previously among the protected seven. But the **remaining** forced overflow remaps still violate the accepted preference for unassigned over incorrect identities, and fixing them without breaking UI/exports requires end-to-end coverage.
+**It should prove:** A native cluster with no validated match can remain reviewable without falsely inheriting someone else's ID; transcript text, manual name locks, note serialization and exports remain intact. Only after the complete candidate passes focused Windows checks should another same-clip replay be requested.
+**Validation boundary:** Eight local pure helper tests passed; full Windows tests and live speaker accuracy remain pending.
 
 ## 14. Parking Lot
 
