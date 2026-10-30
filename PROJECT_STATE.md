@@ -1,7 +1,7 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
 **Last reconciled:** 2026-10-30 (unassigned overflow end-to-end source review, UI fixes and regression additions)
-**State confidence:** Third Teams replay established a speaker-attribution failure (17 native clusters, four ungrounded joins, 30/59 mixed transcript windows). Auto-system confidence-or-unassigned fallback, UI, persistence, exports and synthetic regression fixtures are committed; a subsequent review found and fixed invisible manually named unknown labels. Updated Windows regression suite/typecheck/renderer build and matched real-audio replay have not run.
+**State confidence:** Third Teams replay established a speaker-attribution failure (17 native clusters, four ungrounded joins, 30/59 mixed transcript windows). Auto-system confidence-or-unassigned fallback, UI, persistence, exports and synthetic regressions are committed. On Oct. 30, 56/56 actual committed pure-JavaScript source tests (grouping, policy, diagnostics, assignment) executed successfully in an isolated V8 harness with a limited Node assertion shim; this is **not** a native Node test run, full regression suite, TypeScript check, renderer build, or real-audio validation. Container git clone remains blocked by github.com DNS; GitHub connector file access works.
 **Current milestone:** Validate the confidence-or-unassigned speaker pipeline across capture, notes and review UI
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
@@ -152,7 +152,7 @@ Meeting detection/start
 | Numeric-only native/centroid/overlap diagnostics | Latest Windows replay emitted all diagnostic events: 17 clusters; remap and overlap totals received | **Diagnostics operating in real app; no content committed** |
 | Aggregated speaker-overlap correction | Code `07cd6ae`, regression `9d031ff`; audit counter `18fec36` and tests `88ed480`, `4e391be` | **Committed; seven isolated Node checks passed, full Windows/regression and real replay not run** |
 | Mutual high-confidence native pre-cap grouping | Pure helper `0b2816f` / `7f6cc24`, eight tests `87e6329` / `af6fd38`; main IPC `160aa0d` | **Candidate committed; 8/8 local synthetic checks passed, not Windows/live-validated; Decision 0008 Proposed** |
-| Confidence-or-unassigned automatic system overflow | Backend sentinel/policy, persistence and exports committed; reviewed named-unknown UI fix `cfaae2f` / `a94bea2`, UI tests `5d9c215` / `9ec6a49` / `53a8e88`, backend nine-cluster test `fa61fd5` | **Source/tests committed, complete Windows/real replay unverified; Decision 0009 Proposed** |
+| Confidence-or-unassigned automatic system overflow | Backend sentinel/policy, persistence and exports committed; reviewed named-unknown UI fix `cfaae2f` / `a94bea2`, UI tests `5d9c215` / `9ec6a49` / `53a8e88`, backend nine-cluster test `fa61fd5` | **Source/tests committed; 56/56 matching pure-JS tests passed in isolated V8 harness on Oct. 30; native Node/Windows integration and real replay unverified; Decision 0009 Proposed** |
 | First v2 pilot state audit | Old current sections conflicted with appended event | Reconciled current sections; event moved to `history/`; decision 0005 created |
 | Visible diarization progress overlay | User-requested requirement, Decision 0006 recorded | **Pending design/implementation**; tiny finalizing pill is insufficient |
 
@@ -163,7 +163,7 @@ Meeting detection/start
 - A previously unsupported cluster may now be shown as Unknown Speaker instead of being misattributed. That is intentionally safer, but can increase manual review and loses automatic linking among separate unknown lines.
 - Explicit/saved count and mic-track overflow continue their prior behavior. Ensure their test expectations are unchanged before broadening policies.
 - A manually assigned unknown line intentionally has no numeric speaker cluster; its user-locked name must remain visible and editable after save/reload, and exports must show it without counting unknown as an identified participant.
-- Source-level tests exist; full Windows regression suite, typecheck/renderer build and real-audio replay after the latest commits **have not been executed**. Container GitHub network is unavailable; do not infer success from committed fixtures.
+- The Oct. 30 retry ran 56 actual GitHub-sourced pure-JS tests in isolated V8 with a strict-assert shim: all passed. This **does not** exercise Electron IPC, React, TypeScript, native Node/npm, or Windows. Shell GitHub DNS still fails, while the connector can read source. Full Windows regression suite, typecheck/renderer build and real-audio replay after latest commits **remain unexecuted**.
 - Progress overlay and retained-audio re-diarization remain unimplemented user requirements; user should not be asked for repeated diagnostic replay until the candidate passes the code gate.
 - Preserve the Oct. 28 baseline, selected AirPods output, transcript text, timestamps, user corrections and privacy; no GitHub Actions use.
 
