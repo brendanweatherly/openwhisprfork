@@ -84,6 +84,7 @@ Meeting detection/start
 | Voice-aware cap is used but final speaker attribution remains wrong | Native clustering / merging / transcript alignment | Prevents trustworthy meeting minutes | Oct. 30 replay: 14 native -> 7 final, 11/14 centroids, 7 remaps, 39 turns, 43 text chunks; five identifiable real voices still split/merged across labels; cause not yet isolated |
 | Mixed and fragmented speaker IDs in real transcription | Speaker attribution / transcript alignment | Speaker labels unreliable | Anonymous 4-minute comparison: about 6 actual voices, 7 final labels, one label used on 21/35 transcript segments across multiple people; same real voice also split into several labels |
 | Diarization progress not visible enough | Post-stop UX | User cannot tell what work is running or whether stalled | User explicitly requests a full progress overlay; current transcript shows only a small "finalizing" pill with no stages or elapsed time; Decision 0006 |
+| Fresh October 30 checkout missing installed npm dependencies | Windows prestart / sherpa extraction | Blocks launching the diagnostic build | `npm start` downloaded sherpa-onnx v1.13.8 but could not unpack it: `Cannot find module 'unbzip2-stream'`. Both `package.json` and `package-lock.json` already declare this package; local dependency installation (`npm ci`) is the first recovery step. No source or acoustic code defect established. |
 
 ## 6. Observations, Hypotheses, and Unknowns
 
@@ -157,6 +158,7 @@ Meeting detection/start
 - A fixed seven-speaker auto ceiling remains despite incomplete roster and no user-selected count. The raw 14 native clusters include likely over-segmentation; simply removing the cap could create even more phantom identities.
 - Multi-second transcript chunks can contain speech from more than one speaker; single-turn maximum-overlap logic may assign the chunk to the wrong one. New overlap audit measures this without changing assignments.
 - User reports successful previous typecheck/build; diagnostics commits now need focused regression and Windows integration verification. No GitHub Actions usage.
+- The fresh October 30 extracted checkout failed in the sherpa-onnx unpack step because `unbzip2-stream` was not installed locally; `npm ci` should restore it from the existing lockfile. Do not alter repository dependencies or re-download ZIP without an npm install error.
 - Progress overlay, retained-audio re-diarization, review-lock persistence, and global rename remain separate accepted/unproven behaviors.
 - Preserve the Oct. 28 known-good baseline, AirPods audio output, Orukeet, and private technical corrections. No customer transcription/voice data in public GitHub.
 
