@@ -65,7 +65,7 @@ const START_MS = 1792414000000;
 
 // Runs main's real _startOrSkipDiarization and resolves with the payload it
 // sends. `outcome` picks the diarized, skipped or failed path.
-const runMainDiarization = (mainSegments, { retracted = [], outcome = "diarized" } = {}) =>
+const runMainDiarization = (mainSegments, { retracted = [], outcome = "diarized", onProgress } = {}) =>
   new Promise((resolve) => {
     const diarizationManager = new DiarizationManager();
     diarizationManager.isAvailable = () => outcome !== "skipped";
@@ -85,7 +85,12 @@ const runMainDiarization = (mainSegments, { retracted = [], outcome = "diarized"
     });
     const win = {
       isDestroyed: () => false,
-      webContents: { send: (_channel, payload) => resolve(payload) },
+      webContents: {
+        send: (channel, payload) => {
+          if (channel === "meeting-diarization-progress") onProgress?.(payload);
+          if (channel === "meeting-diarization-complete") resolve(payload);
+        },
+      },
     };
 
     handlers._startOrSkipDiarization(
@@ -238,3 +243,32 @@ test("mixed epoch-ms and relative-seconds rows align with offline speaker window
   );
   assert.ok(payload.segments.every((segment) => segment.speaker === "speaker_0"));
 });
+
+
+test("post-meeting progress reflects actual stage boundaries without invented percentages", async () => {
+  const progress = [];
+  await runMainDiarization([
+    { source: "system", text: "generic test speech", timestamp: START_MS + 3000 },
+  ], { onProgress: (event) => progress.push(event) });
+  assert.deepEqual(progress.map((p) => p.stage), [
+    "preparing", "clustering", "matching", "saving",
+  ]);
+  assert.ok(progress.every((p) => p.sessionId === "diar-1" && p.noteId === 1));
+  assert.ok(progress.every((p) => p.status === "running"));
+  assert.ok(progress.every((p) => typeof p.startedAt === "number" && !("percent" in p)));
+});
+
+for (const outcome of ["skipped", "failed"]) {
+  test(`post-meeting ${outcome} stage is terminal and raw transcript remains available`, async () => {
+    const progress = [];
+    const raw = [{ source: "system", text: "retained test words", timestamp: START_MS + 3000 }];
+    const final = await runMainDiarization(raw, {
+      outcome,
+      onProgress: (event) => progress.push(event),
+    });
+    assert.equal(final.segments[0].text, "retained test words");
+    assert.equal(progress.at(-1).status, outcome);
+    assert.equal(progress.at(-1).sessionId, "diar-1");
+    assert.ok(progress.every((p) => !("percent" in p)));
+  });
+}
