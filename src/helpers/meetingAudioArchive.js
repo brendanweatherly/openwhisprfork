@@ -13,6 +13,23 @@ const FORMAT = "pcm_s16le";
 const SAMPLE_RATE = 24000;
 const CHANNELS = 1;
 
+// Both tracks and note deletion serialize through the same note-owned queue.
+// Never allow a concurrent mic/system write to drop one track from manifest.
+const noteWrites = new Map();
+async function withNoteLock(noteDir, task) {
+  const previous = noteWrites.get(noteDir) ?? Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  noteWrites.set(noteDir, current);
+  try {
+    await previous;
+    return await task();
+  } finally {
+    release();
+    if (noteWrites.get(noteDir) === current) noteWrites.delete(noteDir);
+  }
+}
+
 function validateOwner(noteId, sessionId) {
   if (!Number.isSafeInteger(noteId) || noteId <= 0) throw new Error("Invalid note ownership");
   if (typeof sessionId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$/.test(sessionId)) {
@@ -37,6 +54,8 @@ function ownerPaths(userDataDir, noteId, sessionId) {
 
 async function readManifest(manifestPath) {
   try {
+    const info = await fs.lstat(manifestPath);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error("Unsafe source audio manifest");
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8"));
     if (manifest.version !== 1 || !Array.isArray(manifest.tracks)) {
       throw new Error("Invalid source audio manifest");
@@ -44,6 +63,16 @@ async function readManifest(manifestPath) {
     return manifest;
   } catch (error) {
     if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function safeExistingDirectory(dir) {
+  try {
+    const info = await fs.lstat(dir);
+    return info.isDirectory() && !info.isSymbolicLink();
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
     throw error;
   }
 }
@@ -78,65 +107,67 @@ async function archiveMeetingSource({
     throw new Error("Captured PCM source is empty or unsafe");
   }
 
-  await assertPrivateDirectory(paths.root);
-  await assertPrivateDirectory(paths.noteDir);
-  await assertPrivateDirectory(paths.sessionDir);
-  const manifest = await readManifest(paths.manifestPath) ?? {
-    version: 1, noteId, sessionId, createdAt: Date.now(), tracks: [],
-  };
-  if (manifest.noteId !== noteId || manifest.sessionId !== sessionId) {
-    throw new Error("Source audio manifest belongs to another recording");
-  }
-  if (manifest.tracks.some((item) => item.source === source)) {
-    throw new Error("This source track has already been archived");
-  }
+  return withNoteLock(paths.noteDir, async () => {
+    await assertPrivateDirectory(paths.root);
+    await assertPrivateDirectory(paths.noteDir);
+    await assertPrivateDirectory(paths.sessionDir);
+    const manifest = await readManifest(paths.manifestPath) ?? {
+      version: 1, noteId, sessionId, createdAt: Date.now(), tracks: [],
+    };
+    if (manifest.noteId !== noteId || manifest.sessionId !== sessionId) {
+      throw new Error("Source audio manifest belongs to another recording");
+    }
+    if (manifest.tracks.some((item) => item.source === source)) {
+      throw new Error("This source track has already been archived");
+    }
 
-  const destination = path.join(paths.sessionDir, source + ".pcm");
-  try {
-    await fs.access(destination);
-    throw new Error("This source track already exists");
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error;
-  }
+    const destination = path.join(paths.sessionDir, source + ".pcm");
+    const temp = destination + "." + crypto.randomUUID() + ".tmp";
+    const manifestTemp = paths.manifestPath + "." + crypto.randomUUID() + ".tmp";
+    let published = false;
+    try {
+      await fs.copyFile(inputPath, temp, constants.COPYFILE_EXCL);
+      if (process.platform !== "win32") await fs.chmod(temp, 0o600);
+      const copied = await fs.stat(temp);
+      if (copied.size !== input.size) throw new Error("Incomplete source audio copy");
 
-  const temp = destination + "." + crypto.randomUUID() + ".tmp";
-  const manifestTemp = paths.manifestPath + "." + crypto.randomUUID() + ".tmp";
-  let committedAudio = false;
-  try {
-    await fs.copyFile(inputPath, temp, constants.COPYFILE_EXCL);
-    if (process.platform !== "win32") await fs.chmod(temp, 0o600);
-    const copied = await fs.stat(temp);
-    if (copied.size !== input.size) throw new Error("Incomplete source audio copy");
-    await fs.rename(temp, destination);
-    committedAudio = true;
-
-    manifest.tracks.push({
-      source,
-      file: source + ".pcm",
-      bytes: copied.size,
-      startedAt,
-      format: FORMAT,
-      sampleRate: SAMPLE_RATE,
-      channels: CHANNELS,
-    });
-    await fs.writeFile(manifestTemp, JSON.stringify(manifest, null, 2), {
-      flag: "wx", mode: 0o600,
-    });
-    await fs.rename(manifestTemp, paths.manifestPath);
-    return { noteId, sessionId, source, bytes: copied.size };
-  } catch (error) {
-    // Never overwrite a previous source, and never delete the only original.
-    if (committedAudio) await fs.unlink(destination).catch(() => {});
-    throw error;
-  } finally {
-    await fs.unlink(temp).catch(() => {});
-    await fs.unlink(manifestTemp).catch(() => {});
-  }
+      // Hard-link in the same directory provides atomic, no-overwrite
+      // publication; rename could replace an existing user's source on Windows.
+      await fs.link(temp, destination);
+      published = true;
+      manifest.tracks.push({
+        source,
+        file: source + ".pcm",
+        bytes: copied.size,
+        startedAt,
+        format: FORMAT,
+        sampleRate: SAMPLE_RATE,
+        channels: CHANNELS,
+      });
+      await fs.writeFile(manifestTemp, JSON.stringify(manifest, null, 2), {
+        flag: "wx", mode: 0o600,
+      });
+      await fs.rename(manifestTemp, paths.manifestPath);
+      return { noteId, sessionId, source, bytes: copied.size };
+    } catch (error) {
+      // Never delete the original input, nor an existing source that was not
+      // created by this operation. The manifest remains the source of truth.
+      if (published) await fs.unlink(destination).catch(() => {});
+      throw error;
+    } finally {
+      await fs.unlink(temp).catch(() => {});
+      await fs.unlink(manifestTemp).catch(() => {});
+    }
+  });
 }
-
 async function getArchivedMeetingSource({ userDataDir, noteId, sessionId, source }) {
   const paths = ownerPaths(userDataDir, noteId, sessionId);
   validateSource(source);
+  if (
+    !await safeExistingDirectory(paths.root) ||
+    !await safeExistingDirectory(paths.noteDir) ||
+    !await safeExistingDirectory(paths.sessionDir)
+  ) return null;
   const manifest = await readManifest(paths.manifestPath);
   if (!manifest || manifest.noteId !== noteId || manifest.sessionId !== sessionId) return null;
   const entry = manifest.tracks.find((track) =>
@@ -155,15 +186,18 @@ async function getArchivedMeetingSource({ userDataDir, noteId, sessionId, source
 
 async function deleteArchivedMeetingNote({ userDataDir, noteId }) {
   // Validated numeric note ID prevents arbitrary filesystem deletion.
-  const { noteDir } = ownerPaths(userDataDir, noteId, "cleanup");
-  const info = await fs.lstat(noteDir).catch((error) => {
-    if (error.code === "ENOENT") return null;
-    throw error;
+  const { root, noteDir } = ownerPaths(userDataDir, noteId, "cleanup");
+  return withNoteLock(noteDir, async () => {
+    if (!await safeExistingDirectory(root)) return false;
+    const info = await fs.lstat(noteDir).catch((error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!info) return false;
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Unsafe note audio path");
+    await fs.rm(noteDir, { recursive: true, force: false });
+    return true;
   });
-  if (!info) return false;
-  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("Unsafe note audio path");
-  await fs.rm(noteDir, { recursive: true, force: false });
-  return true;
 }
 
 module.exports = {
