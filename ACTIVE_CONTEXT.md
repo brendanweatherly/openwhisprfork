@@ -24,7 +24,7 @@ The latest real Teams diagnostic established that weak and missing-embedding gro
 - `MeetingTranscriptChat.tsx` displays Unknown Speaker for unreviewed rows; the existing NoteEditor selection bar allows manually naming a chosen line. `transcriptFormatter.js` keeps unknown labels in TXT/SRT/Markdown, JSON reports unassigned count separately and excludes them from speaker count.
 - **New review fixes this turn:** `cfaae2f8` displays a manually named unknown row even though the cluster ID remains absent. `a94bea2d` assigns independently keyed speaker colors to those manually identified remote voices. Tests `5d9c215`, `9ec6a49`, `53a8e88` exercise rendering, re-selection and colors; `fa61fd5` protects end-to-end nine-native-cluster auto results when voice embeddings are unavailable.
 - Proposed Decision 0009 records the confidence-or-unassigned persistence and review behavior; Decisions 0005 and 0008 remain proposed, and 0006 (progress overlay) plus 0007 (retain and re-diarize) remain accepted **but not implemented**.
-- These latest GitHub files and fixtures were read/written directly. **No full Windows focused test suite, typecheck, renderer build, or new Teams accuracy replay has run since this latest code.** The isolated previous pure grouping check (8/8) predates this unknown-handling implementation.
+- October 30 retry: GitHub connector successfully fetched actual current-branch pure JS modules and corresponding four test files, and an isolated V8 CommonJS/assert shim ran **56/56 passed** (8 conservative grouping + 37 diarization policy + 5 numeric diagnostics + 6 assignment policy). This is exact GitHub module/test source, but **not** a native Node test process or complete Electron/React/TypeScript suite. Shell `git ls-remote` still failed `Could not resolve host: github.com`; GitHub connector access remains functional. No Windows typecheck, renderer build or post-change Teams accuracy replay has run.
 
 ## Current Hypothesis or Decision Point
 
@@ -69,7 +69,7 @@ If an assertion fails, inspect and repair the source/test against its actual beh
 
 ## Blockers / Needed Inputs
 
-- Source and tests are committed and read-back verified on GitHub, but **not** executed in a full checkout here. Container GitHub DNS resolution is unavailable; do not claim green Windows tests or app behavior.
+- Source and tests are committed/read-back verified on GitHub. A retry executed **56/56 pure-JS GitHub source tests** under an isolated V8 assert shim, but container GitHub DNS is still unavailable for native checkout. Full Windows tests, TS typecheck, renderer build and actual runtime behavior remain **unverified**.
 - No more user's audio/transcript input is needed before running the focused Windows code checks. GitHub Actions is not used.
 - The current public repository has only anonymous synthetic tests/numeric diagnostics. Private Teams source files, participant identities and customer vocabulary remain off GitHub.
 
