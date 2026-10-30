@@ -13207,10 +13207,18 @@ class IPCHandlers {
     // updates leaking into another open note after navigation.
     const sendProgress = (stage, status = "running") => {
       if (noteId == null || !win || win.isDestroyed()) return;
-      win.webContents.send("meeting-diarization-progress", {
-        sessionId, noteId, stage, status,
-        startedAt: progressStartedAt, updatedAt: Date.now(),
-      });
+      try {
+        win.webContents.send("meeting-diarization-progress", {
+          sessionId, noteId, stage, status,
+          startedAt: progressStartedAt, updatedAt: Date.now(),
+        });
+      } catch (err) {
+        // A detached renderer must never cause acoustic processing or the
+        // original transcript persistence to fail.
+        debugLogger.debug("Diarization progress notification not delivered", {
+          error: err.message,
+        });
+      }
     };
     const send = (payload) => {
       if (win && !win.isDestroyed()) {
