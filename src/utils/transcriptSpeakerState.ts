@@ -1,6 +1,6 @@
 import type { TranscriptSegment } from "../stores/meetingRecordingStore";
 
-export type TranscriptSpeakerStatus = "provisional" | "confirmed" | "suggested" | "locked";
+export type TranscriptSpeakerStatus = "provisional" | "confirmed" | "suggested" | "locked" | "unassigned";
 export type TranscriptSpeakerLockSource = "user" | "diarization" | "suggestion";
 
 const SPEAKER_STATE_FIELDS = [
@@ -35,6 +35,7 @@ const canonicalizeTranscriptSpeakerStatus = (
     case "confirmed":
     case "suggested":
     case "locked":
+    case "unassigned":
       return status;
     case "suggested_profile":
       return "suggested";
@@ -113,12 +114,20 @@ const mergeSpeakerFields = (existing: TranscriptSegment, incoming: TranscriptSeg
     !!incoming.speaker &&
     !incoming.speakerName &&
     !isTranscriptSpeakerLocked(existing);
+  const replacingWithUnassigned =
+    incoming.speakerStatus === "unassigned" && !isTranscriptSpeakerLocked(existing);
   const staleIdentityFields = new Set<SpeakerStateField>([
     "speakerName", "suggestedName", "suggestedProfileId",
+  ]);
+  // Final uncertainty must not restore an old provisional numeric speaker or
+  // suggestion when the incoming final segment intentionally has no identity.
+  const unassignedFields = new Set<SpeakerStateField>([
+    "speaker", "speakerName", "suggestedName", "suggestedProfileId", "speakerLockSource",
   ]);
 
   for (const field of SPEAKER_STATE_FIELDS) {
     if (replacingUnverifiedName && staleIdentityFields.has(field)) continue;
+    if (replacingWithUnassigned && unassignedFields.has(field)) continue;
     if (mergedFields[field] === undefined && existingFields[field] !== undefined) {
       mergedFields[field] = existingFields[field];
     }
