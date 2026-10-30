@@ -129,3 +129,31 @@ test("a stretch of the user's lines reassigned to someone gets its own colour", 
   );
   assert.equal(html.split("border-s-green-400/50").length - 1, 1, "Bob gets the next one");
 });
+
+
+test("manually naming an unknown line keeps its name visible without inventing a speaker ID", async () => {
+  const segments = [
+    {
+      id: "u1", source: "system", timestamp: 1, text: "unassigned acoustic phrase",
+      speaker: undefined, speakerStatus: "unassigned", speakerIsPlaceholder: true,
+    },
+    {
+      id: "u2", source: "system", timestamp: 2, text: "manually reviewed phrase",
+      speaker: undefined, speakerName: "Reviewed Taylor",
+      speakerStatus: "locked", speakerLocked: true,
+      speakerLockSource: "user", speakerIsPlaceholder: false,
+    },
+  ];
+  const html = await renderChat({
+    segments,
+    selectedSegmentIds: new Set(["u2"]),
+    onToggleSelect: () => {},
+  });
+  assert.ok(html.includes("Unknown Speaker"), "unreviewed audio still shows the unknown label");
+  assert.match(html, /aria-label="Reviewed Taylor"/,
+    "a locked name with no acoustic speaker ID must remain visible and clickable");
+  assert.ok(html.includes("ring-2 ring-primary/60"),
+    "the renamed line can be selected again for correction");
+  assert.doesNotMatch(html, /Speaker 1/,
+    "manually naming an unknown line must not fabricate a numbered speaker");
+});
