@@ -12,6 +12,8 @@ const {
   dropNegligibleClusters,
   isCollapsedDiarization,
   capSpeakerClustersByVoice,
+  capMeetingSpeakersWithUnknown,
+  UNASSIGNED_ACOUSTIC_SPEAKER,
 } = require("../../src/helpers/diarizationPolicy");
 
 // 0.55 is tuned for short clean audio; on a 73-minute single-mic voice memo one
@@ -360,4 +362,71 @@ test("the voice cap leaves a run within the cap untouched and can fold everythin
   assert.deepEqual(speakersOf(capSpeakerClustersByVoice(segments, 1, new Map(), dot)), [
     "speaker_0",
   ]);
+});
+
+
+test("auto meeting overflow uses strong matches and leaves missing embeddings unassigned", () => {
+  const basis = (i) => Array.from({ length: 7 }, (_, j) => (i === j ? 1 : 0));
+  const segments = [
+    ...Array.from({ length: 7 }, (_, i) => ({
+      speaker: `speaker_${i}`, start: i * 20, end: i * 20 + 10,
+    })),
+    { speaker: "speaker_7", start: 150, end: 152 },
+    { speaker: "speaker_8", start: 160, end: 163 },
+  ];
+  const centroids = new Map(
+    Array.from({ length: 7 }, (_, i) => [`speaker_${i}`, basis(i)])
+  );
+  centroids.set("speaker_8", basis(2));
+  const dot = (a, b) => a.reduce((sum, n, i) => sum + n * b[i], 0);
+  const result = capMeetingSpeakersWithUnknown(segments, 7, centroids, dot);
+  assert.deepEqual(result.unassignedNativeClusters, ["speaker_7"]);
+  assert.deepEqual(result.confidentRemaps, [
+    { from: "speaker_8", to: "speaker_2", similarity: 1 },
+  ]);
+  assert.equal(result.segments.length, segments.length);
+  assert.equal(result.segments[7].speaker, UNASSIGNED_ACOUSTIC_SPEAKER);
+  assert.equal(result.segments[8].speaker, "speaker_2");
+  assert.equal(segments[7].speaker, "speaker_7", "acoustic source remains unchanged");
+});
+
+test("auto meeting overflow never invents identity from a weak nearest voice", () => {
+  const segments = [
+    { speaker: "speaker_A", start: 0, end: 20 },
+    { speaker: "speaker_B", start: 30, end: 50 },
+    { speaker: "speaker_C", start: 60, end: 65 },
+  ];
+  const centroids = new Map([
+    ["speaker_A", [1, 0]], ["speaker_B", [0, 1]], ["speaker_C", [0.8, 0.6]],
+  ]);
+  const sim = (a, b) => a.reduce((s, n, i) => s + n * b[i], 0);
+  const result = capMeetingSpeakersWithUnknown(segments, 2, centroids, sim);
+  assert.equal(result.segments[2].speaker, UNASSIGNED_ACOUSTIC_SPEAKER);
+  assert.deepEqual(result.unassignedNativeClusters, ["speaker_C"]);
+  assert.equal(result.confidentRemaps.length, 0);
+});
+
+test("auto meeting overflow refuses an overlapping voice even when embeddings are identical", () => {
+  const segments = [
+    { speaker: "speaker_A", start: 0, end: 20 },
+    { speaker: "speaker_B", start: 5, end: 8 },
+  ];
+  const embeddings = new Map([
+    ["speaker_A", [1, 0]], ["speaker_B", [1, 0]],
+  ]);
+  const result = capMeetingSpeakersWithUnknown(segments, 1, embeddings, (a, b) => a[0] * b[0]);
+  assert.equal(result.segments[1].speaker, UNASSIGNED_ACOUSTIC_SPEAKER);
+});
+
+test("auto meeting unknown path does not drop transcript-sized acoustic turns or mutate empty input", () => {
+  const segments = [
+    { speaker: "speaker_A", start: 0, end: 10 },
+    { speaker: "speaker_B", start: 11, end: 12 },
+  ];
+  const result = capMeetingSpeakersWithUnknown(segments, 1, new Map(), () => 1);
+  assert.equal(result.segments.length, 2);
+  assert.equal(result.segments[1].speaker, UNASSIGNED_ACOUSTIC_SPEAKER);
+  assert.deepEqual(capMeetingSpeakersWithUnknown([], 7, new Map(), () => 1), {
+    segments: [], unassignedNativeClusters: [], confidentRemaps: [],
+  });
 });
