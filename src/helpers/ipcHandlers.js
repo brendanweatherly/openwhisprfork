@@ -13265,9 +13265,21 @@ class IPCHandlers {
         // irreversibly merge distinct voices before our speaker cap or voting.
         let diarizationSegments = await this.diarizationManager.diarize(tmpWav);
         const nativeAudioClusters = new Set(diarizationSegments.map((seg) => seg.speaker)).size;
+        const {
+          summarizeNativeClusters,
+          summarizeCapRemaps,
+          summarizeTranscriptOverlap,
+        } = require("./meetingDiarizationDiagnostics");
+        // Numeric speaker ids, lengths and counts only; no customer speech or
+        // identity data. This is before the automatic cap conceals fragmentation.
+        debugLogger.info("Post-meeting native speaker cluster audit", {
+          nativeAudioClusters,
+          clusterMetrics: summarizeNativeClusters(diarizationSegments),
+        });
         const speakerEmb = require("./speakerEmbeddings");
         let capStrategy = "not-needed";
         let capRemaps = [];
+        let capRemapDiagnostics = [];
         let capEmbeddingCoverage = 0;
         if (cap != null && nativeAudioClusters > cap) {
           // The previous meeting-only duration cap folded every extra voice into
@@ -13313,14 +13325,26 @@ class IPCHandlers {
             }
           }
           capRemaps = [...relabels].map(([from, to]) => ({ from, to }));
-          // Cluster ids contain no transcript text or participant identity.
+          capRemapDiagnostics = summarizeCapRemaps(
+            beforeCap,
+            diarizationSegments,
+            centroids,
+            (a, b) => speakerEmb.cosineSimilarity(a, b)
+          );
+          // Numeric acoustic ids and cosine similarities only, no speech or
+          // participant identities. Null similarity identifies blind fallback.
           debugLogger.info("Post-meeting speaker cap audit", {
             countSource,
             capStrategy,
             nativeAudioClusters,
             cap,
             embeddingCoverage: capEmbeddingCoverage,
+            missingEmbeddingClusters: summarizeNativeClusters(beforeCap, centroids)
+              .filter((cluster) => !cluster.hasEmbedding)
+              .map(({ speaker, turns, speechSeconds, longestTurnSeconds }) =>
+                ({ speaker, turns, speechSeconds, longestTurnSeconds })),
             capRemaps,
+            capRemapDiagnostics,
           });
         } else if (cap != null) {
           // Preserve the existing no-op cap call and count-policy regression
@@ -13336,6 +13360,12 @@ class IPCHandlers {
           diarizationSegments,
           { diarizedSource, speakerIndexBase }
         );
+        // ASR can emit one long text chunk spanning more than one acoustic
+        // speaker. Count affected chunks, but never log words or change labels.
+        debugLogger.info("Post-meeting transcript-to-speaker overlap audit", {
+          diarizedSource,
+          ...summarizeTranscriptOverlap(kept, diarizationSegments, diarizedSource),
+        });
 
         const speakerSet = new Set(diarizationSegments.map((d) => d.speaker));
         const speakerRenumber = buildSpeakerRenumber(speakerSet, speakerIndexBase);
