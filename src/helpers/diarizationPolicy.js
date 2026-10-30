@@ -1,6 +1,16 @@
 // Clustering policy for the upload/batch diarization path. Kept free of
 // electron imports so the rules stay unit-testable (pattern: cloudChunkPolicy).
 
+const {
+  LIVE_RECLUSTER_SIMILARITY,
+  BATCH_LABEL_MARGIN,
+} = require("./speakerConfidencePolicy.cjs");
+
+// A deliberately non-numbered acoustic bucket. It is converted to a true
+// unassigned transcript speaker before anything reaches note persistence/UI.
+// This never consumes a named speaker slot or inherits a live speaker profile.
+const UNASSIGNED_ACOUSTIC_SPEAKER = "unassigned_acoustic";
+
 // sherpa-onnx's cluster threshold is a cosine distance: higher merges more.
 // 0.55 suits short clean audio, but over a long single-mic recording one
 // speaker's embeddings drift wider than that and agglomerative clustering
@@ -144,6 +154,79 @@ function capSpeakerClustersByVoice(segments, cap, centroids, similarity) {
   );
 }
 
+// Auto meeting cap: unlike upload/batch caps, unknown or weakly matched
+// overflow clusters must NOT be attributed to one of the retained speakers.
+// Keep the existing number of confident groups, and route unresolved speech
+// to a separate non-numbered acoustic bucket for manual transcript review.
+// Explicit/saved speaker counts still use their existing capping behavior.
+function capMeetingSpeakersWithUnknown(segments, cap, centroids, similarity) {
+  if (!Array.isArray(segments) || segments.length === 0) {
+    return { segments, unassignedNativeClusters: [], confidentRemaps: [] };
+  }
+  const { clusters } = summarizeClusters(segments);
+  if (clusters.size <= cap) {
+    return { segments, unassignedNativeClusters: [], confidentRemaps: [] };
+  }
+  const ranked = [...clusters]
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([speaker]) => speaker);
+  const kept = ranked.slice(0, cap);
+  const remap = new Map();
+  const unknown = [];
+  const confidentRemaps = [];
+  const bySpeaker = new Map();
+  for (const segment of segments) {
+    if (!bySpeaker.has(segment.speaker)) bySpeaker.set(segment.speaker, []);
+    bySpeaker.get(segment.speaker).push(segment);
+  }
+  const overlaps = (speakerA, speakerB) =>
+    (bySpeaker.get(speakerA) || []).some((a) =>
+      (bySpeaker.get(speakerB) || []).some((b) =>
+        Math.min(a.end, b.end) - Math.max(a.start, b.start) > 0
+      )
+    );
+  for (const extra of ranked.slice(cap)) {
+    const voice = centroids instanceof Map ? centroids.get(extra) : null;
+    const candidates = [];
+    if (voice && typeof similarity === "function") {
+      for (const keptId of kept) {
+        const knownVoice = centroids.get(keptId);
+        if (!knownVoice || overlaps(extra, keptId)) continue;
+        let score = null;
+        try { score = similarity(voice, knownVoice); } catch { /* untrusted model */ }
+        if (Number.isFinite(score)) candidates.push({ keptId, score });
+      }
+    }
+    candidates.sort((a, b) => b.score - a.score || a.keptId.localeCompare(b.keptId));
+    const best = candidates[0];
+    const runnerUp = candidates[1]?.score ?? -1;
+    // Reuse established conservative confidence, not the old 'nearest wins'
+    // policy. A score without a competitor margin is insufficient evidence.
+    if (
+      best &&
+      best.score >= LIVE_RECLUSTER_SIMILARITY &&
+      best.score - runnerUp >= BATCH_LABEL_MARGIN
+    ) {
+      remap.set(extra, best.keptId);
+      confidentRemaps.push({
+        from: extra,
+        to: best.keptId,
+        similarity: Number(best.score.toFixed(3)),
+      });
+    } else {
+      remap.set(extra, UNASSIGNED_ACOUSTIC_SPEAKER);
+      unknown.push(extra);
+    }
+  }
+  return {
+    segments: segments.map((seg) =>
+      remap.has(seg.speaker) ? { ...seg, speaker: remap.get(seg.speaker) } : seg
+    ),
+    unassignedNativeClusters: unknown,
+    confidentRemaps,
+  };
+}
+
 module.exports = {
   DEFAULT_CLUSTER_THRESHOLD,
   LONG_AUDIO_CLUSTER_THRESHOLD,
@@ -155,4 +238,6 @@ module.exports = {
   dropNegligibleClusters,
   isCollapsedDiarization,
   capSpeakerClustersByVoice,
+  capMeetingSpeakersWithUnknown,
+  UNASSIGNED_ACOUSTIC_SPEAKER,
 };
