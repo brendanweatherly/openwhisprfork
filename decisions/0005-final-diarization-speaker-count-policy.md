@@ -1,6 +1,6 @@
 # Decision 0005 - Final diarization uses native speaker discovery; only user-set counts limit it
 
-**Status:** Proposed (October 29 first replay failed; voice-aware cap follow-up committed but not yet tested against real audio)
+**Status:** Proposed (voice-aware cap exercised in October 30 replay, but speaker attribution still fails; no policy acceptance)
 **Date:** 2026-10-29
 **Decision owner:** OpenWhispr fork project (technical proposal; user approval not inferred)
 **Supersedes:** Previous implicit behavior that allowed defaults, calendar rosters, and provisional live cluster counts to cap final results
@@ -58,6 +58,16 @@ After the failed replay, the meeting-only cap in `src/helpers/ipcHandlers.js` wa
 **Evidence:** The isolated pure voice-cap algorithm passed a container test with nine synthetic clusters and known vectors. The full repository regression tests, Windows renderer/typecheck on the updated code, and a second real Teams replay have **not** been executed since these commits.
 
 **Residual risk:** If voice centroids cannot be extracted, the current implementation still falls back to duration-only folding to respect the configured ceiling; this must be clearly logged and addressed if it occurs in real use. Even with embeddings, clustering a real voice more than once or attributing a multi-speaker transcript chunk to one voice can remain incorrect. This patch does not resolve audio retention/re-diarization or the progress overlay.
+
+## Real-replay evidence after voice-aware cap (2026-10-30)
+
+The new Windows development-branch recording **did execute** `capStrategy: "voice-similarity"` (not the global duration-only fallback), but the user-supplied log shows **14 native acoustic clusters, 7 final clusters, 11 of 14 native clusters with embeddings, 7 remapped cluster IDs, 39 acoustic turns, 43 transcript chunks, and zero automatically named chunks**. The overlapping Teams reference contains approximately **five actual voices**, yet the final transcript repeatedly gives different speaker labels to the same real person and reuses one label for different people.
+
+**Interpretation:** The embedding path was reached; it did **not** pass real speaker-accuracy acceptance. The label `voice-similarity` does not mean that all seven individual remaps have a measured similarity: `capSpeakerClustersByVoice` still routes extras without embeddings to the longest kept cluster and may select a weak nearest match without a minimum score. Also, `mergeWithTranscript` currently selects the single largest overlapping acoustic turn for a multi-second text chunk, which can span multiple actual speakers. It is not yet proven which mechanism dominates the mistakes.
+
+**Next evidence gate:** Commits `88abab3`, `7bc8cba` and `f6c2904` add numeric-only diagnostics and anonymous tests for raw acoustic turn durations, missing embeddings, individual remap similarity/fallback evidence, and multi-cluster transcript overlap. Four equivalent synthetic diagnostics passed locally; the full fork/Windows integration suite and diagnostics replay have **not** been executed after these commits. No meeting words, names, or voice data were committed.
+
+This decision remains **Proposed**. Do not tune the native clustering threshold, accept the cap as correct, or promote the working branch based only on a seven-cluster output.
 
 ## Acceptance gate
 
