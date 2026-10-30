@@ -66,6 +66,11 @@ import type { NoteItem, FolderItem, ActionItem, ActionKind } from "../../types/e
 import type { ActionProcessingState } from "../../hooks/useActionProcessing";
 import type { NoteActionProgress } from "../../stores/actionProcessingStore";
 import ActionProcessingOverlay from "./ActionProcessingOverlay";
+import MeetingDiarizationProgressOverlay from "./MeetingDiarizationProgressOverlay";
+import {
+  dismissMeetingDiarizationProgress,
+  latestNoteDiarizationProgress,
+} from "../../utils/meetingDiarizationProgress";
 import NoteBottomBar from "./NoteBottomBar";
 import NoteRecordControl, { RecordingWave } from "./NoteRecordControl";
 import ThemedEmptyIllustration from "../ui/ThemedEmptyIllustration";
@@ -303,6 +308,21 @@ export default function NoteEditor({
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [isDiarizing, setIsDiarizing] = useState(false);
+  // Central store retains progress across editor unmounts and note switches.
+  const diarizationProgressBySession = useMeetingRecordingStore(
+    (state) => state.diarizationProgressBySession
+  );
+  const diarizationProgress = useMemo(
+    () => latestNoteDiarizationProgress(diarizationProgressBySession, note.id),
+    [diarizationProgressBySession, note.id]
+  );
+  const dismissDiarization = useCallback((sessionId: string) => {
+    useMeetingRecordingStore.setState((state) => ({
+      diarizationProgressBySession: dismissMeetingDiarizationProgress(
+        state.diarizationProgressBySession, sessionId
+      ),
+    }));
+  }, []);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareIntent, setShareIntent] = useState<"open" | "copy-link">("open");
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
@@ -1470,6 +1490,12 @@ export default function NoteEditor({
             progress={actionProgress ?? null}
             onCancel={onCancelAction}
           />
+          {!isRecording && (
+            <MeetingDiarizationProgressOverlay
+              progress={diarizationProgress}
+              onDismiss={dismissDiarization}
+            />
+          )}
           <div
             className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none"
             style={{
