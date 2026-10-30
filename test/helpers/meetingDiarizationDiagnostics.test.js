@@ -101,7 +101,7 @@ test("overlap audit quantifies a previous single-turn vote error without changin
     chunksWithTimestamps: 2,
     withMultipleClusters: 1,
     balancedMultipleClusters: 1,
-    withNoAcousticOverlap: 0,
+    withNoAcousticOverlap: 1,
     aggregateVoteDiffersFromSingleTurn: 1,
   });
 });
