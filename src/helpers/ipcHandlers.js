@@ -13281,6 +13281,8 @@ class IPCHandlers {
         let capRemaps = [];
         let capRemapDiagnostics = [];
         let capEmbeddingCoverage = 0;
+        let confidentPreCapMerges = [];
+        let clustersAfterPreCapMerges = nativeAudioClusters;
         if (cap != null && nativeAudioClusters > cap) {
           // The previous meeting-only duration cap folded every extra voice into
           // the *longest* speaker. Unlike upload diarization, that merged real
@@ -13300,12 +13302,33 @@ class IPCHandlers {
           capEmbeddingCoverage = centroids.size;
           if (centroids.size > 0) {
             const { capSpeakerClustersByVoice } = require("./diarizationPolicy");
-            diarizationSegments = capSpeakerClustersByVoice(
-              beforeCap,
-              cap,
-              centroids,
-              (a, b) => speakerEmb.cosineSimilarity(a, b)
-            );
+            let evidenceGrouped = beforeCap;
+            if (countSource === "auto" && centroids.size >= 2) {
+              // The old cap protected seven *native* clusters even if two of
+              // them were fragments of one person. Only the automatic path
+              // gets this conservative pre-cap pass; an explicit user count
+              // retains its existing meaning and regression behavior.
+              const { coalesceConfidentSpeakerClusters } = require("./conservativeSpeakerGrouping");
+              const grouped = coalesceConfidentSpeakerClusters(
+                beforeCap,
+                centroids,
+                (a, b) => speakerEmb.cosineSimilarity(a, b)
+              );
+              evidenceGrouped = grouped.segments;
+              confidentPreCapMerges = grouped.merges;
+            }
+            clustersAfterPreCapMerges = new Set(evidenceGrouped.map((s) => s.speaker)).size;
+            // The existing cap is retained for compatibility, but the
+            // high-evidence groups are no longer immune merely because both
+            // were initially among the seven longest native clusters.
+            diarizationSegments = clustersAfterPreCapMerges > cap
+              ? capSpeakerClustersByVoice(
+                  evidenceGrouped,
+                  cap,
+                  centroids,
+                  (a, b) => speakerEmb.cosineSimilarity(a, b)
+                )
+              : evidenceGrouped;
             capStrategy = "voice-similarity";
           } else {
             // Explicit counts and the supported auto ceiling still apply, but
@@ -13339,6 +13362,9 @@ class IPCHandlers {
             nativeAudioClusters,
             cap,
             embeddingCoverage: capEmbeddingCoverage,
+            clustersAfterPreCapMerges,
+            confidentPreCapMergeCount: confidentPreCapMerges.length,
+            confidentPreCapMerges,
             missingEmbeddingClusters: summarizeNativeClusters(beforeCap, centroids)
               .filter((cluster) => !cluster.hasEmbedding)
               .map(({ speaker, turns, speechSeconds, longestTurnSeconds }) =>
@@ -13488,6 +13514,8 @@ class IPCHandlers {
           capStrategy,
           capEmbeddingCoverage,
           capRemapCount: capRemaps.length,
+          confidentPreCapMergeCount: confidentPreCapMerges.length,
+          clustersAfterPreCapMerges,
           audioClusters: new Set(diarizationSegments.map((seg) => seg.speaker)).size,
           diarizationTurns: diarizationSegments.length,
           transcriptSegments: enrichedSegments.length,
