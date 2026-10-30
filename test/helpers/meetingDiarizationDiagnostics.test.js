@@ -62,6 +62,7 @@ test("overlap audit detects one ASR chunk spanning two actual acoustic speaker c
     withMultipleClusters: 1,
     balancedMultipleClusters: 1,
     withNoAcousticOverlap: 1,
+    aggregateVoteDiffersFromSingleTurn: 0,
   });
 });
 
@@ -81,5 +82,26 @@ test("overlap audit reports native fragmentation in one chunk even if no speaker
     withMultipleClusters: 1,
     balancedMultipleClusters: 0,
     withNoAcousticOverlap: 0,
+    aggregateVoteDiffersFromSingleTurn: 0,
+  });
+});
+
+
+test("overlap audit quantifies a previous single-turn vote error without changing content", () => {
+  const chunks = [
+    { source: "system", timestamp: 10, text: "synthetic multi-turn voice" },
+    { source: "system", timestamp: 15, text: "next transcript chunk" },
+  ];
+  const audio = [
+    { speaker: "a", start: 10, end: 11.2 },
+    { speaker: "b", start: 11.2, end: 13 },
+    { speaker: "a", start: 13, end: 14.7 },
+  ];
+  assert.deepEqual(summarizeTranscriptOverlap(chunks, audio), {
+    chunksWithTimestamps: 2,
+    withMultipleClusters: 1,
+    balancedMultipleClusters: 1,
+    withNoAcousticOverlap: 0,
+    aggregateVoteDiffersFromSingleTurn: 1,
   });
 });
