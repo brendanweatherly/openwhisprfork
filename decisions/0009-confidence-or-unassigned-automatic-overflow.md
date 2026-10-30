@@ -1,6 +1,6 @@
 # Decision 0009 - Preserve unassigned speech when automatic speaker matching has insufficient evidence
 
-**Status:** Proposed / implemented for validation; Windows and real-meeting acceptance pending
+**Status:** Proposed / implemented for validation; focused Windows tests/build passed, real-meeting accuracy pending
 **Date:** 2026-10-30
 **Decision owner:** OpenWhispr fork technical implementation, implementing the accepted safety principle in Decision 0003
 **Extends:** Decisions 0003, 0005 and 0008
@@ -49,3 +49,7 @@ Main branch (isolated working branch `fix/meeting-auto-speaker-discovery-2026102
 ## Reopen only if
 
 The implementation loses data, makes manual review unusable, confuses valid in-person mic sources, mislabels voices more often, or produces evidence supporting a better calibrated matching strategy.
+
+## Validation update - 2026-10-30
+
+The user ran the focused `npm run verify:meeting-speakers` gate after the automatic unknown-speaker and native-coalescence code was committed: **249 tests, 245 passed, four skipped, zero failed**, plus successful TypeScript and Vite renderer build. This satisfies the **focused Windows code/build** portion of the acceptance gate, but the names/reasons of the four skips were not supplied. No matched real Teams replay of these changes has yet established actual voice accuracy; this proposal is **not Accepted**. The subsequent progress-overlay commits (Decision 0006) are outside that earlier Windows test run.
