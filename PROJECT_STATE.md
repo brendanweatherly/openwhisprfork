@@ -1,12 +1,12 @@
 # PROJECT STATE - OpenWhispr Fork / Meeting Recorder
 
-**Last reconciled:** 2026-10-29 (after Windows regression-log diagnosis and test-stub corrections)
-**State confidence:** Real replay failure directly evidenced; latest Windows focused suite attempted (69 tests: 56 passed, 13 failed under inherited debug level with the same missing Electron app.isReady mock); corrective test stubs committed but not rerun; voice-aware cap still unverified against real audio.
-**Current milestone:** Validate voice-aware meeting speaker clustering against a real Teams replay
+**Last reconciled:** 2026-10-30 (after user-reported passing Windows focused tests)
+**State confidence:** Earlier Teams replay failure evidenced. User reports the focused Windows speaker-test rerun completed with no failures (the prior suite comprised 69 tests); raw passing output not supplied. Typecheck/renderer build on the updated code not separately confirmed, and voice-aware behavior remains unverified against real audio.
+**Current milestone:** Validate voice-aware speaker attribution using the same real Teams recording
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 **Preserved code baseline branch:** `fix/meeting-speaker-timestamps-20261028`
-**Active work ID:** `OW-SPK-CAP-VALIDATE-20261029`
-**Canonical next action:** Re-run focused speaker regression tests without inherited debug logging, inspect any remaining failures, then replay the same Teams excerpt only after the tests pass.
+**Active work ID:** `OW-SPK-REPLAY-20261030`
+**Canonical next action:** Confirm the current voice-aware branch builds cleanly, then replay the same Teams excerpt and inspect speaker accuracy plus capStrategy diagnostics.
 **Code baseline commit before project-context-only commits:** `26e7f9184a4a50b2f5239f4c8f1229c949175fd2`
 **Active context:** `ACTIVE_CONTEXT.md`
 
@@ -97,7 +97,7 @@ Meeting detection/start
 | Previous chat continuity | Earlier four-speaker replay collapsed to one final voice despite `numSpeakers=-1`; source WAV was temporary. User requested re-diarization after count adjustments **without re-recording**, while preserving the original transcript, corrections and reviewed speaker locks. | The one-speaker collapse was mitigated but reprocess/retention workflow is not yet proven; prioritize after acoustic attribution. |
 | Confirmed progress UI gap | Current note UI exposes only a small finalizing indicator, not a stage-aware progress overlay. | User-requested requirement is recorded in Decision 0006; implementation pending. |
 | Unknown | Whether the voice-aware cap improves correct speakers or instead combines acoustically similar but distinct voices, and whether the embedding extractor runs successfully on the Windows test. | Local focused tests and same-clip replay, inspect `capStrategy`, `capEmbeddingCoverage`, and numeric-only cluster remaps. |
-| Confirmed test-environment failure | User ran 69 focused Windows tests after the new cap patch: 56 passed, 13 failed because debug logging calls Electron `app.isReady()`, which the test mocks did not implement. | Affected test fixtures corrected in commits `f82e7f5`, `74530ec`. Rerun under `OPENWHISPR_LOG_LEVEL=info` in existing checkout to immediately isolate real assertion failures, or use a refreshed checkout with corrected mocks. No full post-fix test pass yet. |
+| Resolved test-harness blocker (user-reported) | Initial focused Windows suite had 13/69 failures from incomplete Electron `app.isReady()` mocks under debug logging; the user now reports a clean rerun. | Test stub fixes in `f82e7f5` and `74530ec`; raw green stdout not provided. No real-audio acceptance result yet. |
 | Older-capture warning | Earlier source-app console output also showed another recording with 32 native voice clusters folded to 7, and repeated default-microphone resolver failures. | That output predates the new `capStrategy` logging and is not proof of the new fix; 32 clusters signals possible acoustic over-splitting beyond overflow folding. PowerShell resolver failure remains an independent audio-device reliability diagnostic. |
 | Interpretation | `namedSegments=0` means no automatic identity labels; by itself this is not a diarization failure. | Conservative unknown-over-wrong naming policy still applies. |
 
@@ -124,19 +124,19 @@ Meeting detection/start
 
 ## 9. Current Priority Order
 
-1. [OW-SPK-CAP-VALIDATE-20261029] Re-run focused speaker regression tests without inherited debug logging, inspect any remaining failures, then replay the same Teams excerpt only after the tests pass.
-2. If the same clip still mixes voices, distinguish incorrect native acoustic clusters, fallback cap strategy, and transcript-chunk speaker-overlap assignments before changing additional code.
-3. Add mixed-speaker transcript boundary regression tests and implement a conservative attribution strategy while preserving user locks and timestamp normalization.
-4. Implement stage-aware diarization progress overlay (Decision 0006), then provide re-diarization from retained audio with safe original-transcript preservation.
-5. Verify rename everywhere, live mic/system isolation, source audio retention and installer; return to technical ASR improvements after speaker correctness.
+1. [OW-SPK-REPLAY-20261030] Confirm the current voice-aware branch builds cleanly, then replay the same Teams excerpt and inspect speaker accuracy plus capStrategy diagnostics.
+2. If the replay still mixes real voices, distinguish incorrect native acoustic clusters, a `duration-fallback` cap, and transcript-chunk speaker-overlap errors before tuning thresholds.
+3. Add mixed-speaker transcript boundary regression tests and conservative attribution without breaking timestamp normalization or speaker locks.
+4. Implement the requested stage-aware diarization progress overlay (Decision 0006) and retained-audio reprocessing (Decision 0007).
+5. Validate rename everywhere, live mic/system isolation, retained source audio, and clean Windows installer; then return to technical ASR improvements.
 
 ## 10. Current Focus
 
 - Active context: `ACTIVE_CONTEXT.md`
-- Active work ID: `OW-SPK-CAP-VALIDATE-20261029`
-- Current target: [OW-SPK-CAP-VALIDATE-20261029] Re-run focused speaker regression tests without inherited debug logging, inspect any remaining failures, then replay the same Teams excerpt only after the tests pass.
+- Active work ID: `OW-SPK-REPLAY-20261030`
+- Current target: [OW-SPK-REPLAY-20261030] Confirm the current voice-aware branch builds cleanly, then replay the same Teams excerpt and inspect speaker accuracy plus capStrategy diagnostics.
 - Working branch: `fix/meeting-auto-speaker-discovery-20261029`
-- Current status: New code and regression committed; Windows test run **not green** (56/69 passed; remaining 13 blocked by test-only Electron `app.isReady` mock). Test fixtures patched (`f82e7f5`, `74530ec`), retest pending. No new real-audio replay of the voice-aware code.
+- Current status: User confirms the focused speaker test suite reran with **no failures**; the prior command ran 69 tests. No raw passing output or post-fix typecheck/renderer-build log was supplied. The voice-aware cap patch (`8bab551`) has not yet been accepted against the real Teams excerpt.
 
 ## 11. Recent Material State Changes
 
@@ -145,14 +145,14 @@ Meeting detection/start
 | Oct. 28 timestamp/confidence/stale-name protection | Focused tests passed earlier | Preserve in the working branch |
 | Orukeet post-decode corrections | Focused tests and a live correction passed earlier | Preserve device-local behavior |
 | Turbo full-video comparison | ~45 min processing for 37 min; material meaning error | Do not replace Orukeet default based on word improvements |
-| Auto-discovery + follow-up voice-aware cap trial | Initial `c0e30a83` and tests; replay failed (9 -> 7 auto cap); updated meeting logic `8bab551` and nine-to-seven test `d95a7ec` | **New implementation unverified against real audio; policy remains proposed** |
+| Auto-discovery + follow-up voice-aware cap trial | Initial replay failed (9 -> 7 auto cap); candidate implementation `8bab551`, regression `d95a7ec`; user now reports focused test rerun passes | **Code tests user-reported green; new implementation not yet real-audio validated. Decision 0005 remains proposed** |
 | First v2 pilot state audit | Old current sections conflicted with appended event | Reconciled current sections; event moved to `history/`; decision 0005 created |
 | Visible diarization progress overlay | User-requested requirement, Decision 0006 recorded | **Pending design/implementation**; tiny finalizing pill is insufficient |
 
 ## 12. Open Risks / Regression Watchlist
 
 - The first real replay produced seven labels for about six people and mixed voices under the same ID; a new patch is **not** live-validated.
-- The updated Windows regression run failed 13/69 cases because inherited debug logging reached missing `app.isReady()` mocks. Fixture fixes are committed but untested; any deeper assertions may be exposed after the mocks are corrected.
+- The initial Windows test run failed 13/69 cases due to incomplete Electron mocks; the user subsequently reported a clean focused rerun. The full passing output was not shared, so this is user-reported test evidence, not independently executed verification.
 - The attached console output also included a **previous** run with 32 native clusters capped to seven, and repeated failures resolving the system default microphone; neither output represents validation of the voice-aware cap.
 - If voice embeddings are unavailable or extract poorly, the current fallback still merges overflow clusters into the dominant voice. `capStrategy`, coverage and cluster remaps must be reviewed.
 - An ASR chunk can cover more than one actual speaker; current transcript merger selects a single voice. Preserve text and mark ambiguity rather than confidently inventing identities.
@@ -164,11 +164,11 @@ Meeting detection/start
 
 ## 13. Next Best Step
 
-**Active work ID:** `OW-SPK-CAP-VALIDATE-20261029`
-**Next:** [OW-SPK-CAP-VALIDATE-20261029] Re-run focused speaker regression tests without inherited debug logging, inspect any remaining failures, then replay the same Teams excerpt only after the tests pass.
-**Why:** The previous meeting path had proven destructive duration-only 9-to-7 folding. The updated Windows suite ran 69 cases and 13 were interrupted by the same missing `app.isReady()` Electron mock when inherited logging was `debug`. We patched the two test stubs without changing application code, but cannot claim a clean regression run yet.
-**It should prove:** With debug log initialization no longer blocking test fixtures, all 69 focused tests can run to completion and report genuine assertions. Only then use the same Teams excerpt to inspect `capStrategy=voice-similarity`, cluster remaps and actual voice stability; investigate native fragmentation or transcript alignment if it still fails.
-**Remaining independent requirement:** Implement the visible diarization progress overlay and ability to re-run diarization from retained audio, keeping original content intact.
+**Active work ID:** `OW-SPK-REPLAY-20261030`
+**Next:** [OW-SPK-REPLAY-20261030] Confirm the current voice-aware branch builds cleanly, then replay the same Teams excerpt and inspect speaker accuracy plus capStrategy diagnostics.
+**Why:** The test-harness issue is no longer blocking the user, who reports no failures on the rerun. The unresolved risk is actual diarization accuracy, not synthetic test execution. The candidate code should be checked for type/build errors and then evaluated against the *same* recording used to establish the failed baseline.
+**It should prove:** `npm run typecheck` and `npm run build:renderer` succeed on the current source; a fresh recording of the same Teams excerpt reports `capStrategy`, `capEmbeddingCoverage`, and numeric remaps, and produces more stable identities than the previous 9→7 duration-only result. If the new strategy falls back or speaker identity remains inaccurate, investigate those specific layers.
+**Remaining independent requirements:** Stage-aware diarization overlay and re-diarization from retained audio, preserving transcript text and reviewed identity locks.
 
 ## 14. Parking Lot
 
