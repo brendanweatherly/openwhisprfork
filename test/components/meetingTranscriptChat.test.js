@@ -157,3 +157,21 @@ test("manually naming an unknown line keeps its name visible without inventing a
   assert.doesNotMatch(html, /Speaker 1/,
     "manually naming an unknown line must not fabricate a numbered speaker");
 });
+
+
+test("distinct reviewed unknown speakers keep separate remote speaker colors", async () => {
+  const html = await renderChat({
+    segments: [
+      { id: "a", text: "first reviewed line", source: "system", timestamp: 1,
+        speakerName: "Reviewed One", speakerStatus: "locked",
+        speakerLocked: true, speakerLockSource: "user", speakerIsPlaceholder: false },
+      { id: "b", text: "second reviewed line", source: "system", timestamp: 2,
+        speakerName: "Reviewed Two", speakerStatus: "locked",
+        speakerLocked: true, speakerLockSource: "user", speakerIsPlaceholder: false },
+    ],
+    onToggleSelect: () => {},
+  });
+  assert.ok(html.includes("Reviewed One") && html.includes("Reviewed Two"));
+  assert.ok(html.includes("border-s-blue-400/50"), "first reviewed voice has its own color");
+  assert.ok(html.includes("border-s-green-400/50"), "second reviewed voice has a distinct color");
+});
