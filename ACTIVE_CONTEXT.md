@@ -1,20 +1,20 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
-**Last updated:** 2026-10-30 - progress overlay committed; previous Windows suite passed, updated tests and real audio pending
-**Current milestone:** Validate end-to-end Teams speaker accuracy and the new progress overlay
-**Active work ID:** `OW-REAL-PROGRESS-20261030`
-**Canonical next action:** Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
+**Last updated:** 2026-10-30 - progress overlay implemented; re-diarization from retained audio prioritized over another manual replay
+**Current milestone:** Enable non-destructive speaker reprocessing from retained meeting audio
+**Active work ID:** `OW-AUDIO-RERUN-20261030`
+**Canonical next action:** Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
 **State source:** `PROJECT_STATE.md`
 **Preserved baseline:** `fix/meeting-speaker-timestamps-20261028`
 **Working branch:** `fix/meeting-auto-speaker-discovery-20261029`
 
 ## Current Target
 
-[OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
+[OW-AUDIO-RERUN-20261030] Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
 
 ## Why This Is Next
 
-The user confirmed that the prior native Windows speaker gate passed (249 tests, 245 passed, 4 skipped, zero failed; TypeScript and renderer build passed). The original daily-use goal is nevertheless not achieved until distinct real speakers are correctly identified and reviewable. The previous three real Teams trials failed identity accuracy and predate the new conservative voice grouping/unassigned changes. A newly accepted stage-aware progress overlay is now committed, driven by real main-process boundaries, so the **next meaningful gate is one updated Windows test run plus one matched real-audio benchmark**. Do not replace the proof with more speculative threshold tuning or repeated isolated-source tests. Retained source-audio re-diarization is the next major implementation dependency once accuracy evidence is available.
+The original requirement is not just passing diarization tests: it is a dependable Windows recorder whose source audio can be recovered and reprocessed. The user already repeated several Teams recordings while the upstream voice labeling continued to fail. The **current stop pipeline deletes raw PCM in `_startOrSkipDiarization` finally** and can discard the mic capture as soon as system output is audible, so an existing note cannot be re-diarized with a changed count or improved model without re-recording. Decision 0007 explicitly accepts retaining separate mic/system tracks and non-destructive re-run. Implement this prerequisite before asking for another manual replay. The completed stage-overlay code (Decision 0006) remains unvalidated on Windows and must be included in the consolidated test gate after this work.
 
 ## Latest Material Evidence
 
@@ -37,15 +37,16 @@ The user confirmed that the prior native Windows speaker gate passed (249 tests,
 
 ## Next Action / Test
 
-**Active work ID:** `OW-REAL-PROGRESS-20261030`
-**Action:** [OW-REAL-PROGRESS-20261030] Run the updated Windows verification and one matched Teams excerpt, checking truthful progress stages and actual speaker identities.
+**Active work ID:** `OW-AUDIO-RERUN-20261030`
+**Action:** [OW-AUDIO-RERUN-20261030] Implement recoverable note/session-scoped mic and system audio retention with non-destructive re-diarization, preserving privacy settings, transcript text and locked speaker names.
 
-1. Obtain the **updated** working branch code on the Windows laptop (earlier extracted ZIP predates this progress feature). Run `npm ci` only in a fresh extraction where dependencies are absent. Run `npm run verify:meeting-speakers` in the folder containing `package.json`; this runs the previous 26 suites **plus two new progress suites**, typecheck and renderer build without GitHub Actions.
-2. If green, launch with `npm start` and make **one** same-excerpt Teams recording using the known-good AirPods Pro output and Orukeet, automatic diarization enabled. Verify the note-scoped overlay shows preparing / clustering / matching / saving with increasing elapsed time and ends after saved transcript, without fake percentages.
-3. Compare the actual resultant speaker labels and Unknown Speaker rows against the previously provided private Teams reference; capture anonymized `Post-meeting...` audit metrics and private new transcript once. If native process fails, check failure/skip state and transcript preservation.
-4. Keep proposed speaker decisions provisional until real labels are more accurate. Only after this evidence, prioritize Decision 0007 source-audio retention/re-diarization and the rest of the complete application acceptance gates.
+1. Design private note/session-owned source storage under the app's local data directory with appropriate filesystem permissions, lifetime/retention behavior and cleanup on note/account deletion. Preserve track timestamps, source identity and multiple resumed recording sessions; never publish raw recordings or vocabulary to GitHub.
+2. Stop deleting/discarding the only available recorded mic/system data until an approved local archival copy has been secured. Preserve current selected AirPods output, mic/system routing, Orukeet ASR and post-stop audio conversion as independent known-good workflows.
+3. Add a post-meeting `Re-run speaker identification` operation that reads only the authorized retained audio for its note, accepts an updated automatic/manual speaker-count policy, leaves raw transcript text, notes, corrections and summaries intact, and preserves or explicitly reconciles user locks. Add a previous-label restore/undo path and enforce request/session ownership.
+4. Integrate genuine progress stages with the new overlay and cover success, skip, unavailable/missing audio, crash/restart, stale note, concurrent/resumed sessions and deletion/retention. Re-run full focused native tests, TypeScript and renderer build once this candidate is ready.
+5. Then use a **single** matched Teams excerpt to assess actual speaker accuracy; all subsequent parameter comparisons should use the retained local source rather than repeated recording.
 
-**Validated now:** Source implementations committed and six isolated reducer checks passed. **Not yet verified:** Updated native Windows 28-suite gate, React UI, real progress events, new speaker-accuracy benchmark.
+**Current evidence:** Previous 245/249 Windows tests passed on the speaker candidate. The new progress overlay is committed and six reducer checks passed in an isolated V8 harness, but updated Windows typecheck/UI/real recording are not verified. Source retention/re-diarization has **not** been implemented yet.
 
 ## Regression Checks
 
@@ -58,16 +59,16 @@ The user confirmed that the prior native Windows speaker gate passed (249 tests,
 
 ## Immediate Branches
 
-- Updated Windows suite/build passes -> run one real Teams benchmark and evaluate speaker accuracy and progress UI together.
-- Native test/typecheck fails -> fix the exact regression, keeping capture/transcription/locked speakers intact; do not bypass the gate.
-- Overlay freezes or shows success before save -> trace note/session events and main/store serialization; update focused tests.
-- Real speaker identity still fails -> use the private reference to fix a measured upstream clustering/alignment issue, not arbitrary voice-count or similarity thresholds.
-- Real speaker identity improves -> move into retained-audio and non-destructive post-meeting re-diarization, then wider installed-app/end-to-end reliability testing.
+- Local retention architecture preserves both tracks and respects user storage settings -> implement per-note rereun/undo and test with anonymous synthetic files.
+- Deleting a note/account or disabling audio retention leaves orphaned private audio -> treat as release-blocking; add cleanup/migration tests.
+- Resumed meeting sessions create colliding offsets/IDs -> preserve per-session manifests and original track anchors; never silently overwrite the note's transcript.
+- New Windows typecheck/renderer or progress test fails -> repair before asking for another Teams audio replay.
+- End-to-end re-diarization passes -> one original Teams excerpt can benchmark false joins/splits; keep speaker decisions Proposed until then.
 
 ## Blockers / Needed Inputs
 
-- This environment can read/update GitHub source but cannot execute Electron/Windows audio or run the actual Teams recording; real benchmark remains dependent on one Windows replay using the user's existing reference file.
-- Updated native Windows tests/renderer build are unexecuted after new progress changes; six isolated reducer tests passed. Earlier prior-build Windows run: 245 passed, four skipped, no failures.
-- User has already supplied the Teams reference in previous conversation context; do not request it again. Do not write private transcripts, names or recordings to GitHub.
-- GitHub Actions minutes are not needed. The current project state uses existing legacy paired records, not a new duplicate project checkpoint.
+- Connected GitHub source is writable and has been updated with the progress overlay; the previous Windows 245-pass gate predates these latest commits. The progress state logic passed six isolated source tests, while the actual renderer/main integration and UI remain unverified.
+- The model cannot drive the user's Windows audio device from this chat. Source retention and reprocessing can be developed and tested with synthetic fixtures before requesting one real Teams validation.
+- Existing temporary raw PCM is deleted after old recordings, so prior notes cannot be reprocessed unless their audio was independently saved. Do not claim recovery of files that were never retained.
+- Decision 0007 is Accepted as a requirement; implementation remains pending. No GitHub Actions minutes and no sensitive meeting data in public source.
 
