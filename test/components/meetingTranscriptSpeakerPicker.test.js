@@ -322,3 +322,25 @@ test("Assign to leaves This is me out when every selected line is the user's", a
   assert.ok(pickerOpen());
   assert.ok(!hasButton(THIS_IS_ME));
 });
+
+
+test("a manually named unknown segment stays visible and can be selected again", async (t) => {
+  const selected = [];
+  const { act } = await mount(
+    t,
+    chat([
+      {
+        id: "review-1", text: "reviewed synthetic line", source: "system", timestamp: 1,
+        speaker: undefined, speakerName: "Reviewed Taylor",
+        speakerStatus: "locked", speakerLocked: true,
+        speakerLockSource: "user", speakerIsPlaceholder: false,
+      },
+    ], {
+      onToggleSelect: (id) => selected.push(id),
+    })
+  );
+  assert.ok(hasButton("Reviewed Taylor"), "the manually assigned name is visible");
+  await act(() => buttonWithText("Reviewed Taylor").click());
+  assert.deepEqual(selected, ["review-1"],
+    "the reviewed line can be selected to change its name without a numeric speaker id");
+});
