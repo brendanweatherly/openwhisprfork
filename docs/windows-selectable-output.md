@@ -38,6 +38,4 @@ blocking error, not an acceptable fallback.
    compiled fork version, not the upstream download.
 9. Run `npm run test`, `npm run typecheck`, and `npm run lint`.
 
-**Status:** Code committed to an isolated feature branch. Windows build and
-actual headset/Teams capture have **not** been validated yet. Do not rely on it
-for a live meeting until the checks above pass.
+**Status (2026-10-30):** Selected AirPods Pro output captured audible Teams system audio in a real user test (peak ~26449, RMS ~1667). The tested FxSound path was effectively silent (peak ~1). The app subsequently launched, and focused speaker regressions, TypeScript and renderer build passed on Windows (245 passing, 4 skipped). **This is not full device/installer acceptance:** Automatic mode, endpoint loss, Bluetooth switching, dock changes, sleep/resume, installed helper packaging and the full checklist above remain unverified. Preserve explicit-device no-silent-fallback behavior.
