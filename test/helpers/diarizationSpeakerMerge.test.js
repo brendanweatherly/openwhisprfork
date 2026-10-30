@@ -256,3 +256,50 @@ test("final diarization preserves a manually locked speaker assignment", () => {
   assert.equal(merged[0].speakerName, "Tracey");
   assert.equal(merged[0].speakerLocked, true);
 });
+
+
+test("unassigned acoustic group becomes an unknown transcript speaker, never a numeric identity", () => {
+  const manager = new DiarizationManager();
+  const segments = [
+    {
+      ...systemSegment(10, "synthetic customer discussion"),
+      speaker: "speaker_4",
+      speakerName: "Incorrect live guess",
+      suggestedName: "Another guess",
+      speakerStatus: "provisional",
+    },
+    systemSegment(15, "synthetic response"),
+  ];
+  const merged = manager.mergeWithTranscript(segments, [
+    { speaker: "unassigned_acoustic", start: 9, end: 14 },
+    { speaker: "speaker_02", start: 14.5, end: 20 },
+  ]);
+  assert.deepEqual(merged.map((s) => s.text), segments.map((s) => s.text));
+  assert.equal(merged[0].speaker, undefined);
+  assert.equal(merged[0].speakerName, undefined);
+  assert.equal(merged[0].suggestedName, undefined);
+  assert.equal(merged[0].speakerStatus, "unassigned");
+  assert.equal(merged[0].speakerIsPlaceholder, true);
+  assert.equal(merged[1].speaker, "speaker_0",
+    "unassigned must not consume a numbered speaker slot");
+});
+
+test("unassigned acoustic result preserves a manually corrected transcript line", () => {
+  const manager = new DiarizationManager();
+  const locked = {
+    ...systemSegment(10, "protected reviewed statement"),
+    speaker: "speaker_8",
+    speakerName: "Reviewed participant",
+    speakerLocked: true,
+    speakerStatus: "locked",
+    speakerLockSource: "user",
+  };
+  const [row] = manager.mergeWithTranscript([locked], [
+    { speaker: "unassigned_acoustic", start: 9, end: 14 },
+  ]);
+  assert.equal(row.text, locked.text);
+  assert.equal(row.speaker, "speaker_8");
+  assert.equal(row.speakerName, "Reviewed participant");
+  assert.equal(row.speakerStatus, "locked");
+  assert.equal(row.speakerLocked, true);
+});
