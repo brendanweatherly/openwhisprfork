@@ -65,6 +65,7 @@ The first failure was a duration-only automatic seven-speaker cap. The second te
 ## Blockers / Needed Inputs
 
 - New code committed via GitHub directly; no GitHub Actions minutes used. Four mirrored pure-helper Node checks passed locally, but no complete current Windows suite or real replay has run since the diagnostic commits.
+- On the newly extracted Oct. 30 checkout, `npm start` reached `download:sherpa-onnx` but failed after the archive download with `Cannot find module 'unbzip2-stream'`; both `package.json` and lockfile declare it. This indicates a missing local `node_modules` package, not a known code defect. In the same x64 Native Tools prompt and source folder run `npm ci` then `npm start`; if `npm ci` itself fails, inspect that output before further changes.
 - The public repo intentionally contains only synthetic fixtures and numeric-only logging code. Original Teams transcript/audio stay private.
 - Retained-audio reprocessing is not yet implemented, so a fresh recorded playback is currently necessary to collect new diagnostic-stage data.
 
