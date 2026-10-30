@@ -35,6 +35,9 @@ function coalesceConfidentSpeakerClusters(segments, centroids, similarity) {
     centroids.has(id) && clusters.get(id).turns.length >= 2
   );
   if (eligible.length < 2) return { segments, merges: [] };
+  // One-turn embedded groups cannot be merged, but remain competitors: their
+  // similarity can make a tempting pair ambiguous.
+  const competitors = [...clusters.keys()].filter((id) => centroids.has(id));
 
   const pairScore = (a, b) => {
     try {
@@ -46,7 +49,7 @@ function coalesceConfidentSpeakerClusters(segments, centroids, similarity) {
   };
   const ranked = new Map();
   for (const id of eligible) {
-    const candidates = eligible
+    const candidates = competitors
       .filter((other) => other !== id)
       .map((other) => ({ id: other, score: pairScore(id, other) }))
       .filter(({ score }) => score != null)
