@@ -3392,6 +3392,14 @@ declare global {
         code?: string;
       }>;
       onDiarizationDownloadProgress?: (callback: (data: any) => void) => () => void;
+      onMeetingDiarizationProgress?: (callback: (data: {
+        sessionId?: string;
+        noteId?: number | null;
+        stage?: "preparing" | "clustering" | "matching" | "saving";
+        status?: "running" | "success" | "skipped" | "failed";
+        startedAt?: number;
+        updatedAt?: number;
+      }) => void) => () => void;
       onMeetingDiarizationComplete?: (
         callback: (data: {
           sessionId?: string;
