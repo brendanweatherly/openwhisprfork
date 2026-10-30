@@ -40,3 +40,15 @@ Unblocks repeated, evidence-based speaker-quality comparisons without tedious Te
 
 - Explicit user request and earlier meeting-test troubleshooting in the October 28-29 OpenWhispr chats; earlier conversion WAVs were temporary.
 - Current fork project state and October 29 real Teams replay failure.
+
+## Partial implementation checkpoint - 2026-10-30
+
+The accepted requirement is **not yet functionally complete**. The isolated source archive foundation is now implemented and tested, but it is **intentionally not wired to live recording** until the privacy/retention and note-deletion contract can be enforced end-to-end.
+
+- `src/helpers/meetingAudioArchive.js` copies an already-closed PCM track to a note/session-scoped private local archive without deleting its original source, recording format (24 kHz / mono / signed 16-bit), byte count, source (mic/system) and capture time anchor in a manifest.
+- It rejects invalid note IDs/session strings/source names, empty and symlink input, and stale cross-note manifests. Same-note operations are serialized so simultaneous mic/system writes do not lose manifest entries. Files publish without overwriting existing captured audio, and a note-specific archive deletion helper is available. This helper is not proof of *database authorization*; callers must verify current note ownership and retention permission before writing or reading.
+- `test/helpers/meetingAudioArchive.test.js` contains nine synthetic filesystem tests. **9/9 passed using native Node v22.16.0 in an isolated Linux container**. The tested source and test files' exact Git blob hashes matched the current GitHub branch. No actual audio/customer content was used. The local validation command now includes this test, for 29 total focused files.
+- Current recording code STILL deletes temporary raw PCM after the initial diarization; audible system audio currently stops/discards the mic raw capture. Neither deletion behavior has yet been changed. No old meeting audio has been recovered, and the re-run speaker identification UI/operation, per-account authorization, retention cleanup and undo/restore are not implemented.
+- The archive manager must be integrated only once resolved local-history policy, audio retention days, note/account deletion, session resume and archived-source lifecycle are handled safely. Win32-specific filesystem semantics and packaging must be tested; Linux tests do not prove Windows operation.
+
+**Next implementation:** Wire the new archive to the capture/stop pipeline with explicit retention gating and deletion cleanup, then add a non-destructive re-diarization operation that preserves saved transcript text, reviewed/locked speaker names, summaries and a previous-label restore path. Do not require repeated manual Teams playback until this lifecycle is ready where practical.
