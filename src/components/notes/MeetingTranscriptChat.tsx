@@ -705,7 +705,7 @@ const SegmentRow = memo(function SegmentRow({
   const hasSpeaker = !!segment.speaker;
   const isUnassigned = segment.speakerStatus === "unassigned" && !hasSpeaker;
   const isOriginallyYou = segment.speaker === "you";
-  const isSystemSpeaker = hasSpeaker && !selfSide;
+  const isSystemSpeaker = (hasSpeaker || !!activeName) && !selfSide;
   // Only an in-person mic cluster may be the user: diarization can't tell which
   // voice is theirs. A call's remote voices never are, and its mic is already
   // "you", where naming one line remaps every line of the mic.
@@ -1084,7 +1084,7 @@ export function MeetingTranscriptChat({
               const i = virtualItem.index;
               const segment = segments[i];
               const { key, activeName, selfSide } = rowMeta[i];
-              const isSystemSpeaker = !!segment.speaker && !selfSide;
+              const isSystemSpeaker = (!!segment.speaker || !!activeName) && !selfSide;
               return (
                 <div
                   key={segment.id}
