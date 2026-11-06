@@ -10,6 +10,7 @@ on:
       - "src/helpers/ipcHandlers.js"
       - "test/helpers/meetingAudioArchive.test.js"
       - "test/helpers/meetingSourceRetentionLifecycle.test.js"
+      - "test/components/meetingDiarizationProgressOverlay.test.js"
       - "scripts/verify-meeting-speakers.js"
       - ".github/workflows/meeting-audio-retention-validation.yml"
 
