@@ -216,6 +216,52 @@ async function getArchivedMeetingSource({ userDataDir, noteId, sessionId, source
   });
 }
 
+/**
+ * Public metadata only: enumerate usable source tracks for one authorized note.
+ * Do not expose filesystem paths or enumerate any other note's recordings.
+ * This runs under the same lock as source writes, reads and note deletion.
+ */
+async function listArchivedMeetingSessions({ userDataDir, noteId, authorize }) {
+  const paths = ownerPaths(userDataDir, noteId, "enumerate");
+  return withNoteLock(paths.noteDir, async () => {
+    await requireArchiveAuthorization(authorize, "list", noteId, "enumerate", "system");
+    if (!await safeExistingDirectory(paths.root) ||
+        !await safeExistingDirectory(paths.noteDir)) return [];
+    const rows = [];
+    for (const entry of await fs.readdir(paths.noteDir, { withFileTypes: true })) {
+      const match = /^session-([A-Za-z0-9][A-Za-z0-9_-]{0,100})$/.exec(entry.name);
+      if (!match || !entry.isDirectory()) continue;
+      const sessionId = match[1];
+      const sessionDir = path.join(paths.noteDir, entry.name);
+      if (!await safeExistingDirectory(sessionDir)) continue;
+      let manifest;
+      try {
+        manifest = await readManifest(path.join(sessionDir, "manifest.json"));
+      } catch {
+        continue;
+      }
+      if (!manifest || manifest.noteId !== noteId || manifest.sessionId !== sessionId ||
+          !Number.isFinite(manifest.createdAt) || manifest.createdAt <= 0) continue;
+      const tracks = [];
+      for (const source of ["system", "mic"]) {
+        const item = manifest.tracks.find((track) =>
+          track.source === source && track.file === source + ".pcm" &&
+          track.format === FORMAT && track.sampleRate === SAMPLE_RATE &&
+          track.channels === CHANNELS && Number.isFinite(track.startedAt) &&
+          track.startedAt > 0 && Number.isSafeInteger(track.bytes) && track.bytes > 0);
+        if (!item) continue;
+        const stat = await fs.lstat(path.join(sessionDir, source + ".pcm")).catch(() => null);
+        if (stat?.isFile() && !stat.isSymbolicLink() && stat.size === item.bytes) {
+          tracks.push({ source, startedAt: item.startedAt,
+            durationSeconds: item.bytes / (SAMPLE_RATE * CHANNELS * 2) });
+        }
+      }
+      if (tracks.length) rows.push({ sessionId, createdAt: manifest.createdAt, tracks });
+    }
+    return rows.sort((a, b) => b.createdAt - a.createdAt);
+  });
+}
+
 async function deleteArchivedMeetingNote({ userDataDir, noteId }) {
   // Validated numeric note ID prevents arbitrary filesystem deletion.
   const { root, noteDir } = ownerPaths(userDataDir, noteId, "cleanup");
@@ -341,6 +387,7 @@ module.exports = {
   mayRetainMeetingSource,
   archiveMeetingSource,
   getArchivedMeetingSource,
+  listArchivedMeetingSessions,
   deleteArchivedMeetingNote,
   deleteArchivedMeetingSession,
   cleanupArchivedMeetingSources,

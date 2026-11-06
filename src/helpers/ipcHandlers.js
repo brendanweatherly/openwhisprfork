@@ -159,6 +159,7 @@ const {
 } = require("./meetingMicGate");
 const { deriveDetectorPreferences } = require("./meetingDetectionPreferencePolicy");
 const { resolveDiarizationInput } = require("./meetingDiarizationInput");
+const { registerMeetingSpeakerRerunIpc } = require("./meetingSpeakerRerunIpc");
 const { applySmartSpacing } = require("./smartSpacing");
 const { applyAutoLearnSetting } = require("./autoLearnSetting");
 const {
@@ -879,6 +880,8 @@ class IPCHandlers {
   }
 
   _handleAuthTokenChange({ generation, token }) {
+    this._meetingSpeakerRerunPreviews?.clear();
+    this._meetingSpeakerRerunUndo?.clear();
     this.windowManager.retireMeetingNotificationScope();
     this.enterpriseIdentityManager?.clear();
     if (!token) {
@@ -2078,6 +2081,8 @@ class IPCHandlers {
     );
 
     ipcMain.handle("delete-all-audio", async () => {
+      this._meetingSpeakerRerunPreviews?.clear();
+      this._meetingSpeakerRerunUndo?.clear();
       this._meetingSourcePurgeGeneration += 1;
       const result = this.audioStorageManager.deleteAllAudio();
       try {
@@ -2361,6 +2366,15 @@ class IPCHandlers {
       return this.databaseManager.getNote(id);
     });
 
+    registerMeetingSpeakerRerunIpc({
+      ipcMain, app, context: this, maxSpeakerCount: MAX_SPEAKER_COUNT,
+      getAuthContext: () => ({
+        signedIn: Boolean(tokenStore.getState()?.token),
+        generation: tokenStore.getState()?.generation,
+      }),
+      broadcastToWindows,
+    });
+
     ipcMain.handle("db-get-notes", async (event, noteType, limit, folderId, spaceId) => {
       return this.databaseManager.getNotes(noteType, limit, folderId, spaceId);
     });
@@ -2572,6 +2586,10 @@ class IPCHandlers {
       ) {
         this.windowManager.retireMeetingNotificationScope();
       }
+      if (this.databaseManager.activeAccountId !== accountId) {
+        this._meetingSpeakerRerunPreviews?.clear();
+        this._meetingSpeakerRerunUndo?.clear();
+      }
       this.databaseManager.setActiveAccountId(accountId);
       if (accountId !== null) accountScopeBinding.persist(accountId, state.token);
       else accountScopeBinding.clear();
@@ -2620,6 +2638,8 @@ class IPCHandlers {
           this.metaActivation?.purge(accountId);
           this.notifyVectorChanges();
           for (const noteId of result.deletedNoteIds) {
+            this._meetingSpeakerRerunPreviews?.delete(noteId);
+            this._meetingSpeakerRerunUndo?.delete(noteId);
             this._asyncMirrorDelete(noteId);
           }
           // Account removal must remove all retained meeting source PCM for
@@ -2663,6 +2683,8 @@ class IPCHandlers {
             this._asyncMirrorWrite(note);
           }
           for (const noteId of result.noteIds ?? []) {
+            this._meetingSpeakerRerunPreviews?.delete(noteId);
+            this._meetingSpeakerRerunUndo?.delete(noteId);
             this._asyncMirrorDelete(noteId);
           }
           await Promise.all((result.noteIds ?? []).map((noteId) =>
@@ -2908,6 +2930,8 @@ class IPCHandlers {
     ipcMain.handle("db-hard-delete-note", async (_, id) => {
       const result = this.databaseManager.hardDeleteNote(id);
       if (result?.success) {
+        this._meetingSpeakerRerunPreviews?.delete(id);
+        this._meetingSpeakerRerunUndo?.delete(id);
         await deleteArchivedMeetingNote({ userDataDir: app.getPath("userData"), noteId: id });
         this.notifyVectorChanges();
         this._asyncMirrorDelete(id);
@@ -9934,7 +9958,8 @@ class IPCHandlers {
             noteIdSnapshot,
             diarizedSource,
             speakerIndexBaseSnapshot,
-            retractedSegments
+            retractedSegments,
+            expectedSessionId
           );
 
           return { success: true, transcript, diarizationSessionId };
@@ -9978,7 +10003,8 @@ class IPCHandlers {
           noteIdSnapshot,
           diarizedSource,
           speakerIndexBaseSnapshot,
-          retractedSegments
+          retractedSegments,
+          expectedSessionId
         );
 
         return { success: true, transcript, diarizationSessionId };
@@ -13299,7 +13325,8 @@ class IPCHandlers {
     noteId = null,
     diarizedSource = "system",
     speakerIndexBase = 0,
-    retractedSegments = []
+    retractedSegments = [],
+    recordingSessionId = null
   ) {
     const startMs =
       (Number.isFinite(audioStartedAt) && audioStartedAt) ||
@@ -13364,7 +13391,8 @@ class IPCHandlers {
     const sendUndiarized = () =>
       send({
         segments: transcriptSegments
-          .map((segment, index) => ({ ...segment, id: segment.id || `segment-${index}` }))
+          .map((segment, index) => ({ ...segment, id: segment.id || `segment-${index}`,
+            ...(recordingSessionId ? { recordingSessionId } : {}) }))
           .filter((_, index) => !isEchoDuplicate(index)),
       });
 
@@ -13712,7 +13740,9 @@ class IPCHandlers {
         // Persistence happens in the renderer's module-level completion
         // listener; only that listener may mark a successful saved result.
         sendProgress("saving");
-        send({ segments: enrichedSegments, speakerEmbeddings: speakerEmbeddingsMap });
+        send({ segments: enrichedSegments.map((segment) => ({ ...segment,
+          ...(recordingSessionId ? { recordingSessionId } : {}) })),
+          speakerEmbeddings: speakerEmbeddingsMap });
       } catch (err) {
         sendProgress(undefined, "failed");
         debugLogger.warn("Background diarization failed", { error: err.message });
@@ -13747,6 +13777,8 @@ class IPCHandlers {
   async deleteNoteInternal(id) {
     const result = this.databaseManager.deleteNote(id);
     if (result?.success) {
+      this._meetingSpeakerRerunPreviews?.delete(id);
+      this._meetingSpeakerRerunUndo?.delete(id);
       await deleteArchivedMeetingNote({ userDataDir: app.getPath("userData"), noteId: id });
       setImmediate(() => broadcastToWindows("note-deleted", { id }));
       this.notifyVectorChanges();

@@ -16,6 +16,8 @@ const root = path.resolve(__dirname, "..");
 const tests = [
   "test/helpers/conservativeSpeakerGrouping.test.js",
   "test/helpers/meetingAudioArchive.test.js",
+  "test/helpers/meetingSpeakerRerun.test.js",
+  "test/helpers/meetingSpeakerRerunIpc.test.js",
   "test/helpers/meetingSourceRetentionLifecycle.test.js",
   "test/helpers/diarizationPolicy.test.js",
   "test/helpers/diarizationSpeakerMerge.test.js",

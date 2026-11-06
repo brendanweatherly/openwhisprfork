@@ -66,6 +66,8 @@ export interface TranscriptSegment {
   text: string;
   source: "mic" | "system";
   timestamp?: number;
+  /** Stable source-capture identity; required to re-run only this recording. */
+  recordingSessionId?: string;
   speaker?: string;
   speakerName?: string;
   speakerIsPlaceholder?: boolean;
@@ -1137,7 +1139,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<boolean>
               // reduction inserts into that snapshot. Reads of segmentsRefValue (assignProvisionalSpeaker)
               // still see the previous segments, exactly as before the reducer extraction.
               decorateFinal: (rawSegment) => {
-                let decorated = rawSegment;
+                let decorated: TranscriptSegment = { ...rawSegment, recordingSessionId: sessionId };
                 for (let i = speakerIdentifications.length - 1; i >= 0; i -= 1) {
                   decorated = applySpeakerIdentification(decorated, speakerIdentifications[i]);
                 }

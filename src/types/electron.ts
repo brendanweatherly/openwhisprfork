@@ -3423,6 +3423,50 @@ declare global {
         }) => void
       ) => () => void;
 
+      // Source-audio speaker rerun. Main owns all paths, preview text and
+      // compare-and-save; renderer receives metadata and a one-time token.
+      meetingSpeakerRerunSessions?: (noteId: number) => Promise<{
+        success: boolean;
+        error?: string;
+        sessions?: Array<{
+          sessionId: string;
+          createdAt: number;
+          tracks: Array<{ source: "mic" | "system"; startedAt: number; durationSeconds: number }>;
+        }>;
+      }>;
+      meetingSpeakerRerunPreview?: (request: {
+        noteId: number;
+        sessionId: string;
+        source: "mic" | "system";
+        expectedCount: number;
+      }) => Promise<{
+        success: boolean;
+        error?: string;
+        requestId?: string;
+        changedCount?: number;
+        matchedCount?: number;
+        lockedCount?: number;
+        detectedCount?: number;
+        appliedCap?: number;
+        method?: string;
+      }>;
+      meetingSpeakerRerunApply?: (noteId: number, requestId: string) => Promise<{
+        success: boolean;
+        error?: string;
+        changedCount?: number;
+        note?: NoteItem;
+      }>;
+      meetingSpeakerRerunUndo?: (noteId: number) => Promise<{
+        success: boolean;
+        error?: string;
+        note?: NoteItem;
+      }>;
+      onMeetingSpeakerRerunStage?: (callback: (data: {
+        noteId: number;
+        requestId: string;
+        stage: "preparing" | "clustering" | "matching";
+      }) => void) => () => void;
+
       // Speaker name mapping
       getSpeakerMappings?: (noteId: number) => Promise<
         Array<{

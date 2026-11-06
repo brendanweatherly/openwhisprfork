@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const {
   ARCHIVE_FOLDER, mayRetainMeetingSource, archiveMeetingSource,
-  getArchivedMeetingSource, deleteArchivedMeetingNote,
+  getArchivedMeetingSource, listArchivedMeetingSessions, deleteArchivedMeetingNote,
   cleanupArchivedMeetingSources, deleteAllArchivedMeetingSources,
 } = require("../../src/helpers/meetingAudioArchive");
 
@@ -287,4 +287,47 @@ test("failed or unresolved retention scope never removes old audio", async (t) =
   await assert.rejects(cleanupArchivedMeetingSources({
     userDataDir: fix.root, retentionDays: -1, canSweepNote: async () => true,
   }), /Invalid source audio cleanup policy/);
+});
+
+test("authorized rerun list returns only that note's valid session/track metadata", async (t) => {
+  const fix = await fixture(t);
+  await save(fix);
+  await save(fix, { source: "mic", startedAt: 1793370999500 });
+  await save(fix, { noteId: 13, sessionId: "other-session" });
+  const found = await listArchivedMeetingSessions({
+    userDataDir: fix.root, noteId: 12, authorize,
+  });
+  assert.equal(found.length, 1);
+  assert.equal(found[0].sessionId, "meeting-001");
+  assert.deepEqual(found[0].tracks.map((track) => track.source), ["system", "mic"]);
+  assert.ok(found[0].tracks.every((track) => track.durationSeconds > 0));
+  assert.equal(Object.hasOwn(found[0], "path"), false);
+  await assert.rejects(listArchivedMeetingSessions({
+    userDataDir: fix.root, noteId: 12, authorize: async () => ({
+      ...allowedRetention, noteAuthorized: false,
+    }),
+  }), /authorization denied/);
+  assert.equal((await listArchivedMeetingSessions({
+    userDataDir: fix.root, noteId: 13, authorize,
+  })).length, 1);
+});
+
+test("rerun list excludes forged, deleted and unsafe source tracks", async (t) => {
+  const fix = await fixture(t);
+  await save(fix);
+  const track = path.join(fix.root, ARCHIVE_FOLDER,
+    "note-12", "session-meeting-001", "system.pcm");
+  const manifestPath = path.join(fix.root, ARCHIVE_FOLDER,
+    "note-12", "session-meeting-001", "manifest.json");
+  await fs.unlink(track);
+  assert.equal((await listArchivedMeetingSessions({
+    userDataDir: fix.root, noteId: 12, authorize,
+  })).length, 0);
+  await fs.writeFile(track, Buffer.from([0, 0, 1, 0, 255, 255, 0, 0]));
+  const record = JSON.parse(await fs.readFile(manifestPath, "utf8"));
+  record.noteId = 99;
+  await fs.writeFile(manifestPath, JSON.stringify(record));
+  assert.equal((await listArchivedMeetingSessions({
+    userDataDir: fix.root, noteId: 12, authorize,
+  })).length, 0);
 });

@@ -529,6 +529,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
     (callback) => (_event, data) => callback(data)
   ),
 
+  meetingSpeakerRerunSessions: (noteId) =>
+    ipcRenderer.invoke("meeting-speaker-rerun-sessions", noteId),
+  meetingSpeakerRerunPreview: (request) =>
+    ipcRenderer.invoke("meeting-speaker-rerun-preview", request),
+  meetingSpeakerRerunApply: (noteId, requestId) =>
+    ipcRenderer.invoke("meeting-speaker-rerun-apply", noteId, requestId),
+  meetingSpeakerRerunUndo: (noteId) =>
+    ipcRenderer.invoke("meeting-speaker-rerun-undo", noteId),
+  onMeetingSpeakerRerunStage: registerListener(
+    "meeting-speaker-rerun-stage",
+    (callback) => (_event, data) => callback(data)
+  ),
+
   // Speaker name mapping
   getSpeakerMappings: (noteId) => ipcRenderer.invoke("get-speaker-mappings", noteId),
   setSpeakerMapping: (noteId, speakerId, displayName, email, profileId) =>

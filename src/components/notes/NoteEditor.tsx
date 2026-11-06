@@ -67,6 +67,7 @@ import type { ActionProcessingState } from "../../hooks/useActionProcessing";
 import type { NoteActionProgress } from "../../stores/actionProcessingStore";
 import ActionProcessingOverlay from "./ActionProcessingOverlay";
 import MeetingDiarizationProgressOverlay from "./MeetingDiarizationProgressOverlay";
+import MeetingSpeakerRerunControls from "./MeetingSpeakerRerunControls";
 import {
   dismissMeetingDiarizationProgress,
   latestNoteDiarizationProgress,
@@ -1392,6 +1393,15 @@ export default function NoteEditor({
 
         <div className="flex-1 relative min-h-0">
           <div ref={contentScrollRef} className="h-full overflow-y-auto">
+            {viewMode === "transcript" && !isRecording && canEditNote && ownedByUser &&
+              hasChatSegments && (
+                <MeetingSpeakerRerunControls key={note.id} noteId={note.id}
+                  initialCount={note.expected_speaker_count}
+                  onTranscriptSaved={(updatedNote) => {
+                    setDiarizedSegments(null);
+                    updateNoteInStore(updatedNote);
+                  }} />
+              )}
             {viewMode === "transcript" && (hasChatSegments || isRecording) ? (
               isRecording ? (
                 <LiveMeetingTranscriptChat
