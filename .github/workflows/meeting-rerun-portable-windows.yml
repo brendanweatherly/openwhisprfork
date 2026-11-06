@@ -1,0 +1,110 @@
+name: OpenWhispr Fork portable Windows acceptance build
+
+on:
+  push:
+    branches:
+      - feat/meeting-audio-retention-20261106
+    paths:
+      - ".github/workflows/meeting-rerun-portable-windows.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openwhispr-rerun-portable-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-portable:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out validated fork branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use project Node version
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Enable MSVC for Windows capture helper
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install application and native dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Prepare native helpers and packaged local models
+        run: npm run prebuild:win
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+          BRAND_FONTS_REQUIRED: "0"
+
+      - name: Create nonsecret runtime config and build renderer
+        shell: pwsh
+        run: |
+          Set-Content -Path .env -Value "VITE_AUTH_URL=${{ vars.VITE_AUTH_URL || 'https://auth.openwhispr.com' }}" -Encoding ascii
+          npm run build:renderer
+        env:
+          VITE_AUTH_URL: ${{ vars.VITE_AUTH_URL || 'https://auth.openwhispr.com' }}
+          VITE_OPENWHISPR_API_URL: ${{ vars.VITE_OPENWHISPR_API_URL }}
+          VITE_OPENWHISPR_OAUTH_CALLBACK_URL: ${{ vars.VITE_OPENWHISPR_OAUTH_CALLBACK_URL }}
+
+      - name: Package unsigned portable Windows build (no release or publish)
+        shell: pwsh
+        run: |
+          npx electron-builder --config electron-builder.unsigned-win.json --win portable --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+
+      - name: Stage one isolated test executable and launcher
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path "portable-test" -Force | Out-Null
+          $exe = Get-ChildItem -Path "dist" -Filter "*.exe" -File |
+            Sort-Object Length -Descending | Select-Object -First 1
+          if (-not $exe -or $exe.Length -lt 1000000) {
+            throw "Portable executable missing or unexpectedly small"
+          }
+          Copy-Item $exe.FullName "portable-test/OpenWhispr-Fork-Test.exe"
+          @'
+          @echo off
+          setlocal
+          rem Uses staging data in %%APPDATA%%\OpenWhispr-staging.
+          rem The installed production OpenWhispr data is not opened.
+          set "OPENWHISPR_CHANNEL=staging"
+          set "VITE_OPENWHISPR_PROTOCOL=openwhispr-staging"
+          start "" "%%~dp0OpenWhispr-Fork-Test.exe"
+          '@ | Set-Content -Path "portable-test/START_OPENWHISPR_TEST.bat" -Encoding ascii
+          @'
+          OPENWHISPR FORK - PORTABLE TEST BUILD
+
+          1. Extract this GitHub Actions artifact ZIP to a folder.
+          2. Double-click START_OPENWHISPR_TEST.bat (not the EXE directly).
+          3. This launches a separate staging profile, not the installed app's notes.
+          4. Make a NEW disposable sample recording, then stop it.
+          5. On the transcript page choose Re-run speaker identification.
+          6. Select the recorded track, adjust total speakers, then Preview.
+          7. Apply the speaker labels and test Undo.
+          8. Verify transcript words and manually locked speakers remain unchanged.
+          9. If no saved recording appears, inspect app retention preferences.
+          10. Never treat this unsigned acceptance build as a production release.
+
+          Windows SmartScreen may warn because this build is deliberately unsigned.
+          This package is an unreleased testing build from your GitHub branch.
+          GitHub Actions artifact retention is three days.
+          '@ | Set-Content -Path "portable-test/README_TEST_FIRST.txt" -Encoding ascii
+          Get-ChildItem portable-test | Select-Object Name, Length | Format-Table
+
+      - name: Upload only portable test files (3-day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenWhispr-Fork-Portable-Test-Windows
+          path: portable-test/*
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
