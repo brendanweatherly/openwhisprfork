@@ -478,7 +478,13 @@ class DiarizationManager {
     // Mic-mode softening: a single cluster on a mic-only session is the user
     // talking alone (e.g. a call where the remote never spoke audibly), so it
     // stays "you" instead of becoming a stranger's speaker_0.
-    const micSingleCluster = diarizedSource === "mic" && speakerSet.size === 1;
+    // A rerun can retain one confident mic identity plus unknown acoustic
+    // groups. That is not evidence everyone on the mic is the user.
+    const hasUnknownClusters = diarizationSegments.some(
+      (d) => d.speaker === UNASSIGNED_ACOUSTIC_SPEAKER
+    );
+    const micSingleCluster = diarizedSource === "mic" &&
+      speakerSet.size === 1 && !hasUnknownClusters;
 
     const nextTimestampAt = (startIndex, source) => {
       for (let i = startIndex + 1; i < transcriptSegments.length; i += 1) {

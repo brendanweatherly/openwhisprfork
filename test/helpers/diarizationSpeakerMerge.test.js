@@ -303,3 +303,19 @@ test("unassigned acoustic result preserves a manually corrected transcript line"
   assert.equal(row.speakerStatus, "locked");
   assert.equal(row.speakerLocked, true);
 });
+
+
+test("mic rerun with unknown acoustic groups does not relabel every voice as you", () => {
+  const manager = new DiarizationManager();
+  const result = manager.mergeWithTranscript(
+    [micSegment(1, "synthetic first voice"), micSegment(10, "synthetic uncertain voice")],
+    [{ start: 0, end: 4, speaker: "speaker_00" },
+     { start: 9, end: 14, speaker: "unassigned_acoustic" }],
+    { diarizedSource: "mic" }
+  );
+  assert.equal(result[0].speaker, "speaker_0");
+  assert.equal(result[1].speaker, undefined);
+  assert.equal(result[1].speakerStatus, "unassigned");
+  assert.deepEqual(result.map((s) => s.text),
+    ["synthetic first voice", "synthetic uncertain voice"]);
+});

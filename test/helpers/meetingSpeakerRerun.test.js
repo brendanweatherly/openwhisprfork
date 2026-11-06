@@ -87,6 +87,8 @@ test("caps explicit system speaker count to count minus self", async () => {
     diarizationManager:makeDiarizer(), embeddings:{isAvailable:()=>false}
   });
   assert.equal(result.cap,1);
-  assert.equal(result.method,"duration-fallback");
-  assert.equal(new Set(result.segments.map((s)=>s.speaker)).size,1);
+  assert.equal(result.method,"confidence-or-unassigned");
+  assert.equal(result.unassignedNativeClusters,1);
+  assert.ok(result.segments.some((s)=>s.speaker==="unassigned_acoustic"));
+  assert.ok(result.segments.some((s)=>s.speaker==="speaker_0"));
 });

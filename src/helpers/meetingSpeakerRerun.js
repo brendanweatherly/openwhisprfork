@@ -6,7 +6,7 @@
  * unrelated recording sessions, locked assignments and note fields survive.
  */
 const { isSpeakerLocked } = require("./speakerAssignmentPolicy");
-const { capSpeakerClustersByVoice } = require("./diarizationPolicy");
+const { capMeetingSpeakersWithUnknown } = require("./diarizationPolicy");
 const SPEAKER_FIELDS = [
   "speaker", "speakerName", "speakerIsPlaceholder", "suggestedName",
   "suggestedProfileId", "speakerStatus", "speakerLocked", "speakerLockSource",
@@ -84,14 +84,16 @@ async function capRerunSpeakerGroups({
       centroids = await embeddings.extractClusterCentroids(wavPath, segments);
     }
   } catch { /* No unvalidated confidence claims when embeddings are unavailable. */ }
-  const result = centroids.size > 0
-    ? capSpeakerClustersByVoice(
-        segments, cap, centroids,
-        (a, b) => embeddings.cosineSimilarity(a, b)
-      )
-    : diarizationManager.capSpeakerClusters(segments, cap);
-  return { segments: result, detectedCount: count, cap,
-    method: centroids.size > 0 ? "voice-similarity" : "duration-fallback" };
+  // A duration-only remap can falsely label a completely different person.
+  // Unknown/unassigned is safer, even for an explicit count, when voice
+  // embeddings are missing or do not confidently match a retained cluster.
+  const result = capMeetingSpeakersWithUnknown(
+    segments, cap, centroids,
+    (a, b) => embeddings.cosineSimilarity(a, b)
+  );
+  return { segments: result.segments, detectedCount: count, cap,
+    method: "confidence-or-unassigned",
+    unassignedNativeClusters: result.unassignedNativeClusters.length };
 }
 
 function buildSpeakerRerunPreview({

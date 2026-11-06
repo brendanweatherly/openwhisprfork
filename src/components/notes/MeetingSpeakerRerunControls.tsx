@@ -241,8 +241,8 @@ export default function MeetingSpeakerRerunControls({
           Preview ready: {preview.changedCount} speaker labels to change across {preview.matchedCount}
           {" "}timed statements; {preview.lockedCount} manually locked statements preserved.
           {" "}Detected acoustic groups: {preview.detectedCount}.
-          {preview.method === "duration-fallback" &&
-            " Voice embeddings were unavailable; speaker grouping used the fallback policy."}
+          {preview.method === "confidence-or-unassigned" &&
+            " Acoustic groups without a reliable voice match remain unassigned rather than inheriting another person's label."}
         </p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
