@@ -17,7 +17,10 @@ async function renderProgress(progress) {
     });
   }
   const mod = await import("../../src/components/notes/MeetingDiarizationProgressOverlay.tsx");
-  return renderStatic(mod.default, { progress, onDismiss: () => {} });
+  // tsx on newer Node can expose a CommonJS default export as a nested default.
+  const Component = typeof mod.default === "function" ? mod.default : mod.default?.default;
+  assert.equal(typeof Component, "function");
+  return renderStatic(Component, { progress, onDismiss: () => {} });
 }
 
 const example = {
