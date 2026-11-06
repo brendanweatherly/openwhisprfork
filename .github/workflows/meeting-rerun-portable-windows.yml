@@ -74,11 +74,11 @@ jobs:
           @'
           @echo off
           setlocal
-          rem Uses staging data in %%APPDATA%%\OpenWhispr-staging.
+          rem Uses staging data in %APPDATA%\OpenWhispr-staging.
           rem The installed production OpenWhispr data is not opened.
           set "OPENWHISPR_CHANNEL=staging"
           set "VITE_OPENWHISPR_PROTOCOL=openwhispr-staging"
-          start "" "%%~dp0OpenWhispr-Fork-Test.exe"
+          start "" "%~dp0OpenWhispr-Fork-Test.exe"
           '@ | Set-Content -Path "portable-test/START_OPENWHISPR_TEST.bat" -Encoding ascii
           @'
           OPENWHISPR FORK - PORTABLE TEST BUILD
