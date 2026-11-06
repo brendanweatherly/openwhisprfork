@@ -41,6 +41,33 @@ function validateSource(source) {
   if (source !== "mic" && source !== "system") throw new Error("Invalid audio source");
 }
 
+// A synced renderer default is not sufficient consent for a managed account.
+// This does not replace the caller's live note-ownership / tombstone check.
+function mayRetainMeetingSource({
+  retentionSettingsSynced, retentionSettings, hasActiveAccountScope, noteAuthorized,
+}) {
+  return retentionSettingsSynced === true &&
+    noteAuthorized === true &&
+    retentionSettings?.dataRetentionEnabled === true &&
+    Number.isSafeInteger(retentionSettings.audioRetentionDays) &&
+    retentionSettings.audioRetentionDays >= 0 &&
+    (hasActiveAccountScope === false ||
+      (hasActiveAccountScope === true && retentionSettings.localHistoryPolicyResolved === true));
+}
+
+async function requireArchiveAuthorization(authorize, action, noteId, sessionId, source) {
+  // Explicit and re-evaluated under the per-note lock: preflight consent may
+  // become stale while another track is being saved or the note is deleted.
+  // The callback supplies current settings/account/note evidence, not a bare
+  // boolean that could accidentally bypass the retention-policy gate.
+  if (typeof authorize !== "function" ||
+      !mayRetainMeetingSource(await authorize(Object.freeze({ action, noteId, sessionId, source })))) {
+    const error = new Error("Source audio authorization denied");
+    error.code = "SOURCE_AUDIO_NOT_AUTHORIZED";
+    throw error;
+  }
+}
+
 function ownerPaths(userDataDir, noteId, sessionId) {
   validateOwner(noteId, sessionId);
   if (typeof userDataDir !== "string" || !path.isAbsolute(userDataDir)) {
@@ -88,11 +115,13 @@ async function assertPrivateDirectory(dir) {
 
 /**
  * Archives an internally captured, already-closed raw PCM source without
- * deleting the original. Caller must check data retention and note ownership.
+ * deleting the original. An explicit callback must verify current retention,
+ * account permission and a live, non-deleted note under the note write lock.
+ * It must return the policy snapshot required by mayRetainMeetingSource.
  * No transcript text, names, speaker embeddings or customer metadata written.
  */
 async function archiveMeetingSource({
-  userDataDir, noteId, sessionId, source, inputPath, startedAt,
+  userDataDir, noteId, sessionId, source, inputPath, startedAt, authorize,
 }) {
   const paths = ownerPaths(userDataDir, noteId, sessionId);
   validateSource(source);
@@ -102,12 +131,12 @@ async function archiveMeetingSource({
   if (!Number.isFinite(startedAt) || startedAt <= 0) {
     throw new Error("Invalid audio time anchor");
   }
-  const input = await fs.lstat(inputPath);
-  if (!input.isFile() || input.isSymbolicLink() || input.size <= 0) {
-    throw new Error("Captured PCM source is empty or unsafe");
-  }
-
   return withNoteLock(paths.noteDir, async () => {
+    await requireArchiveAuthorization(authorize, "write", noteId, sessionId, source);
+    const input = await fs.lstat(inputPath);
+    if (!input.isFile() || input.isSymbolicLink() || input.size <= 0) {
+      throw new Error("Captured PCM source is empty or unsafe");
+    }
     await assertPrivateDirectory(paths.root);
     await assertPrivateDirectory(paths.noteDir);
     await assertPrivateDirectory(paths.sessionDir);
@@ -160,9 +189,11 @@ async function archiveMeetingSource({
     }
   });
 }
-async function getArchivedMeetingSource({ userDataDir, noteId, sessionId, source }) {
+async function getArchivedMeetingSource({ userDataDir, noteId, sessionId, source, authorize }) {
   const paths = ownerPaths(userDataDir, noteId, sessionId);
   validateSource(source);
+  return withNoteLock(paths.noteDir, async () => {
+  await requireArchiveAuthorization(authorize, "read", noteId, sessionId, source);
   if (
     !await safeExistingDirectory(paths.root) ||
     !await safeExistingDirectory(paths.noteDir) ||
@@ -182,6 +213,7 @@ async function getArchivedMeetingSource({ userDataDir, noteId, sessionId, source
   const info = await fs.lstat(filename).catch(() => null);
   if (!info?.isFile() || info.isSymbolicLink() || info.size !== entry.bytes) return null;
   return { path: filename, startedAt: entry.startedAt, bytes: entry.bytes };
+  });
 }
 
 async function deleteArchivedMeetingNote({ userDataDir, noteId }) {
@@ -200,9 +232,117 @@ async function deleteArchivedMeetingNote({ userDataDir, noteId }) {
   });
 }
 
+async function deleteArchivedMeetingSession({ userDataDir, noteId, sessionId }) {
+  const paths = ownerPaths(userDataDir, noteId, sessionId);
+  return withNoteLock(paths.noteDir, async () => {
+    if (!await safeExistingDirectory(paths.root) ||
+        !await safeExistingDirectory(paths.noteDir) ||
+        !await safeExistingDirectory(paths.sessionDir)) return false;
+    await fs.rm(paths.sessionDir, { recursive: true, force: false });
+    try {
+      await fs.rmdir(paths.noteDir);
+    } catch (error) {
+      if (error.code !== "ENOTEMPTY" && error.code !== "ENOENT") throw error;
+    }
+    return true;
+  });
+}
+
+/**
+ * Sweep locally retained audio without crossing account boundaries. The caller
+ * must only approve notes in the currently resolved account; an unscoped
+ * database lookup is NOT permission to delete another account's recordings.
+ * A zero-day retention value means "keep forever" unless purge is explicit.
+ * The sweep does not touch temporary recording inputs.
+ */
+async function cleanupArchivedMeetingSources({
+  userDataDir, retentionDays, canSweepNote, purge = false, now = Date.now(),
+}) {
+  if (!Number.isSafeInteger(retentionDays) || retentionDays < 0 ||
+      !Number.isFinite(now) || now <= 0 || typeof canSweepNote !== "function") {
+    throw new Error("Invalid source audio cleanup policy");
+  }
+  const { root } = ownerPaths(userDataDir, 1, "sweep");
+  const rootInfo = await fs.lstat(root).catch((error) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  const result = { scannedNotes: 0, skippedNotes: 0, deletedSessions: 0, deletedNotes: 0 };
+  if (!rootInfo) return result;
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    throw new Error("Unsafe source audio archive root");
+  }
+  const cutoff = now - retentionDays * 86400000;
+  for (const row of await fs.readdir(root, { withFileTypes: true })) {
+    const match = /^note-([1-9]\d*)$/.exec(row.name);
+    if (!match || !row.isDirectory()) continue;
+    const noteId = Number(match[1]);
+    if (!Number.isSafeInteger(noteId)) continue;
+    result.scannedNotes += 1;
+    let approved;
+    try {
+      approved = (await canSweepNote(noteId)) === true;
+    } catch {
+      approved = false;
+    }
+    if (!approved) {
+      result.skippedNotes += 1;
+      continue;
+    }
+    const noteDir = path.join(root, row.name);
+    await withNoteLock(noteDir, async () => {
+      if (!await safeExistingDirectory(noteDir)) return;
+      if (purge) {
+        await fs.rm(noteDir, { recursive: true, force: false });
+        result.deletedNotes += 1;
+        return;
+      }
+      if (retentionDays === 0) return;
+      const sessions = await fs.readdir(noteDir, { withFileTypes: true });
+      for (const sessionRow of sessions) {
+        if (!sessionRow.isDirectory() || !/^session-[A-Za-z0-9][A-Za-z0-9_-]{0,100}$/.test(sessionRow.name)) {
+          continue;
+        }
+        const sessionDir = path.join(noteDir, sessionRow.name);
+        if (!await safeExistingDirectory(sessionDir)) continue;
+        let manifest;
+        try {
+          manifest = await readManifest(path.join(sessionDir, "manifest.json"));
+        } catch {
+          // Corrupt/unsafe manifests are not a reason to delete unknown files.
+          continue;
+        }
+        if (!manifest || manifest.noteId !== noteId ||
+            manifest.sessionId !== sessionRow.name.slice("session-".length) ||
+            !Number.isFinite(manifest.createdAt) || manifest.createdAt <= 0 ||
+            manifest.createdAt >= cutoff) continue;
+        await fs.rm(sessionDir, { recursive: true, force: false });
+        result.deletedSessions += 1;
+      }
+      try {
+        await fs.rmdir(noteDir);
+        result.deletedNotes += 1;
+      } catch (error) {
+        if (error.code !== "ENOTEMPTY" && error.code !== "ENOENT") throw error;
+      }
+    });
+  }
+  return result;
+}
+
+async function deleteAllArchivedMeetingSources({ userDataDir }) {
+  return cleanupArchivedMeetingSources({
+    userDataDir, retentionDays: 0, purge: true, canSweepNote: async () => true,
+  });
+}
+
 module.exports = {
   ARCHIVE_FOLDER,
+  mayRetainMeetingSource,
   archiveMeetingSource,
   getArchivedMeetingSource,
   deleteArchivedMeetingNote,
+  deleteArchivedMeetingSession,
+  cleanupArchivedMeetingSources,
+  deleteAllArchivedMeetingSources,
 };

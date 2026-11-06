@@ -166,6 +166,17 @@ const {
   createRetentionSettingsHandler,
 } = require("./retentionSettings");
 const {
+  cleanupArchivedMeetingSources,
+  deleteAllArchivedMeetingSources,
+  deleteArchivedMeetingNote,
+} = require("./meetingAudioArchive");
+const {
+  createMeetingSourceAuthorization,
+  canRetainMeetingNote,
+  retainClosedMeetingTracks,
+  isLiveOwnedNote,
+} = require("./meetingSourceRetentionLifecycle");
+const {
   transcriptsOverlap,
   transcriptsLooselyOverlap,
   buildMergedCandidates,
@@ -711,6 +722,13 @@ class IPCHandlers {
     this._retentionCleanupInterval = null;
     this._retentionSettings = { ...DEFAULT_RETENTION_SETTINGS }; // Synced from renderer
     this._retentionSettingsSynced = false;
+    this._meetingSourcePurgeGeneration = 0;
+    this._authorizeMeetingSource = createMeetingSourceAuthorization({
+      databaseManager: this.databaseManager,
+      getRetentionSettings: () => this._retentionSettings,
+      getRetentionSettingsSynced: () => this._retentionSettingsSynced,
+      getSignedIn: () => Boolean(tokenStore.getState()?.token),
+    });
     this._noteFilesEnabled = false;
     this._granolaImportPending = null;
     this._analyticsHistoryBackfillPromise = null;
@@ -1326,6 +1344,22 @@ class IPCHandlers {
       }
       if (audioRetentionDays > 0) {
         this.audioStorageManager.cleanupExpiredAudio(audioRetentionDays, this.databaseManager);
+      }
+      // Never sweep another account's note archive under the current user's
+      // retention choice, or run while the managed policy is unresolved.
+      const signedIn = Boolean(tokenStore.getState()?.token);
+      if (this._retentionSettingsSynced &&
+          (!signedIn || this._retentionSettings.localHistoryPolicyResolved === true)) {
+        void cleanupArchivedMeetingSources({
+          userDataDir: app.getPath("userData"),
+          retentionDays: audioRetentionDays,
+          purge: this._retentionSettings.dataRetentionEnabled === false,
+          canSweepNote: async (noteId) => isLiveOwnedNote({
+            noteId, databaseManager: this.databaseManager, signedIn,
+          }),
+        }).catch((error) => debugLogger.error("Meeting source retention sweep failed", {
+          error: error.message,
+        }, "audio-storage"));
       }
     } catch (error) {
       debugLogger.error("Retention cleanup failed", { error: error.message }, "audio-storage");
@@ -2029,6 +2063,9 @@ class IPCHandlers {
         getOwner: () => this.windowManager.mainWindow?.webContents,
         hasSynced: () => this._retentionSettingsSynced,
         onSettingsChanged: (settings) => {
+          if (settings.dataRetentionEnabled === false) {
+            this._meetingSourcePurgeGeneration += 1;
+          }
           this._retentionSettings = settings;
           this._retentionSettingsSynced = true;
           this._runRetentionCleanup();
@@ -2041,6 +2078,7 @@ class IPCHandlers {
     );
 
     ipcMain.handle("delete-all-audio", async () => {
+      this._meetingSourcePurgeGeneration += 1;
       const result = this.audioStorageManager.deleteAllAudio();
       try {
         const rows = this.databaseManager.db
@@ -2056,7 +2094,10 @@ class IPCHandlers {
           "audio-storage"
         );
       }
-      return result;
+      // An active meeting cannot re-publish old audio after Delete All Audio.
+      // The Delete All Audio control must include source PCM, not just WebM.
+      const archived = await deleteAllArchivedMeetingSources({ userDataDir: app.getPath("userData") });
+      return { ...result, deletedSourceArchiveNotes: archived.deletedNotes };
     });
 
     ipcMain.handle("get-transcription-by-id", async (event, id) => {
@@ -2581,6 +2622,11 @@ class IPCHandlers {
           for (const noteId of result.deletedNoteIds) {
             this._asyncMirrorDelete(noteId);
           }
+          // Account removal must remove all retained meeting source PCM for
+          // notes that were actually purged, before reporting completion.
+          await Promise.all(result.deletedNoteIds.map((noteId) =>
+            deleteArchivedMeetingNote({ userDataDir: app.getPath("userData"), noteId })
+          ));
           return { success: true, ...result };
         } catch (error) {
           return { success: false, code: "LOCAL_ACCOUNT_CLEANUP_FAILED", error: error.message };
@@ -2619,6 +2665,9 @@ class IPCHandlers {
           for (const noteId of result.noteIds ?? []) {
             this._asyncMirrorDelete(noteId);
           }
+          await Promise.all((result.noteIds ?? []).map((noteId) =>
+            deleteArchivedMeetingNote({ userDataDir: app.getPath("userData"), noteId })
+          ));
         }
         setImmediate(() => {
           broadcastToWindows("space-purged", { spaceId: result.spaceId });
@@ -2856,9 +2905,10 @@ class IPCHandlers {
     ipcMain.handle("db-restore-note-after-denied-delete", (_, id) =>
       this.databaseManager.restoreNoteAfterDeniedDelete(id)
     );
-    ipcMain.handle("db-hard-delete-note", (_, id) => {
+    ipcMain.handle("db-hard-delete-note", async (_, id) => {
       const result = this.databaseManager.hardDeleteNote(id);
       if (result?.success) {
+        await deleteArchivedMeetingNote({ userDataDir: app.getPath("userData"), noteId: id });
         this.notifyVectorChanges();
         this._asyncMirrorDelete(id);
         setImmediate(() => broadcastToWindows("note-deleted", { id }));
@@ -7541,16 +7591,51 @@ class IPCHandlers {
         systemStartedAt,
         micStartedAt,
       });
-      for (const stalePath of cleanupPcmPaths) {
-        fs.unlink(stalePath, () => {});
-      }
+      // Close streams before copying, including the non-diarized channel. Do
+      // not delete either input until archival has been attempted under policy.
       return {
         diarizationPcmPath: pcmPath,
         diarizationSegments,
         retractedSegments,
         diarizationStartedAt: startedAt,
         diarizedSource,
+        cleanupPcmPaths,
+        closedTracks: [
+          { source: "mic", path: micPcmPath, startedAt: micStartedAt },
+          { source: "system", path: systemPcmPath, startedAt: systemStartedAt },
+        ],
       };
+    };
+
+    const archiveAndCleanupClosedTracks = async ({
+      noteId, recordingSessionId, closedTracks, cleanupPcmPaths,
+      eligibleAtStart, purgeGenerationAtStart,
+    }) => {
+      try {
+        if (eligibleAtStart) {
+          const result = await retainClosedMeetingTracks({
+            userDataDir: app.getPath("userData"), noteId,
+            sessionId: recordingSessionId, tracks: closedTracks,
+            authorize: this._authorizeMeetingSource,
+            canContinue: () => purgeGenerationAtStart === this._meetingSourcePurgeGeneration,
+          });
+          if (result.errors.length) {
+            debugLogger.warn("Meeting PCM retention incomplete", {
+              failedTracks: result.errors.map((row) => row.source),
+            }, "audio-storage");
+          }
+        }
+      } catch (error) {
+        // Failure to retain source audio must never destroy the original
+        // transcript or prevent the existing post-stop diarization.
+        debugLogger.warn("Meeting source archival failed", {
+          error: error.message,
+        }, "audio-storage");
+      } finally {
+        for (const stalePath of cleanupPcmPaths) {
+          await fs.promises.unlink(stalePath).catch(() => {});
+        }
+      }
     };
 
     const attachMeetingStreamingHandlers = (streaming, win, source) => {
@@ -8148,6 +8233,16 @@ class IPCHandlers {
     let meetingOneOnOneAttendee = null;
     let meetingOneOnOneProfileBound = false;
     let meetingNoteId = null;
+    // Only a session that had resolved authorization when it started can keep
+    // both raw PCM channels for later re-diarization. Stop still rechecks it.
+    let meetingArchiveCaptureEligible = false;
+    let meetingArchiveCaptureGeneration = 0;
+    const shouldKeepMicSourceForReplay = () => meetingArchiveCaptureEligible &&
+      meetingArchiveCaptureGeneration === this._meetingSourcePurgeGeneration &&
+      this._retentionSettingsSynced &&
+      this._retentionSettings.dataRetentionEnabled === true &&
+      (!Boolean(tokenStore.getState()?.token) ||
+        this._retentionSettings.localHistoryPolicyResolved === true);
     // First speaker index this session may mint; past a resumed note's ids.
     let meetingSpeakerIndexBase = 0;
 
@@ -8739,15 +8834,19 @@ class IPCHandlers {
     };
 
     const dropMeetingMicDiarizationCapture = () => {
-      if (meetingMicDiarizationStream) {
-        meetingMicDiarizationStream.end();
-        meetingMicDiarizationStream = null;
-      }
-      if (meetingMicDiarizationPath) {
-        fs.unlink(meetingMicDiarizationPath, () => {});
-        meetingMicDiarizationPath = null;
-      }
+      const stream = meetingMicDiarizationStream;
+      const filename = meetingMicDiarizationPath;
+      meetingMicDiarizationStream = null;
+      meetingMicDiarizationPath = null;
       meetingMicDiarizationStartedAt = null;
+      // Windows cannot reliably unlink PCM while the write stream is open.
+      // Remove it only after end has finished flushing and closing the file.
+      if (stream) {
+        stream.once("close", () => { if (filename) fs.unlink(filename, () => {}); });
+        stream.end();
+      } else if (filename) {
+        fs.unlink(filename, () => {});
+      }
     };
 
     const resetMeetingLocalState = () => {
@@ -8765,6 +8864,8 @@ class IPCHandlers {
       meetingOneOnOneAttendee = null;
       meetingOneOnOneProfileBound = false;
       meetingNoteId = null;
+      meetingArchiveCaptureEligible = false;
+      meetingArchiveCaptureGeneration = 0;
       meetingSpeakerIndexBase = 0;
       this._activeMeetingNoteId = null;
       meetingLocalMode = false;
@@ -9374,6 +9475,10 @@ class IPCHandlers {
         meetingOneOnOneAttendee = resolveOneOnOneAttendeeForNote(options.noteId);
         meetingOneOnOneProfileBound = false;
         meetingNoteId = options.noteId ?? null;
+        meetingArchiveCaptureGeneration = this._meetingSourcePurgeGeneration;
+        meetingArchiveCaptureEligible = await canRetainMeetingNote(
+          this._authorizeMeetingSource, meetingNoteId, recordingSessionId
+        );
         meetingSpeakerIndexBase = this._resolveMeetingSpeakerIndexBase(
           meetingNoteId,
           options.speakerIndexBase
@@ -9532,7 +9637,9 @@ class IPCHandlers {
           if (audible && !meetingSystemAudioHeard) {
             // A call is audibly underway, so stop paying the mic capture's disk cost.
             meetingSystemAudioHeard = true;
-            dropMeetingMicDiarizationCapture();
+            if (!shouldKeepMicSourceForReplay()) {
+              dropMeetingMicDiarizationCapture();
+            }
           }
         }
 
@@ -9545,7 +9652,7 @@ class IPCHandlers {
         // raw mic capture so an in-person recording can be diarized. Written
         // pre-AEC/pre-gate so the timeline stays continuous, like the system
         // capture above.
-        if (!meetingSystemAudioHeard) {
+        if (!meetingSystemAudioHeard || shouldKeepMicSourceForReplay()) {
           if (!meetingMicDiarizationStream) {
             const receivedAt = Date.now();
             meetingMicDiarizationPath = path.join(
@@ -9556,6 +9663,11 @@ class IPCHandlers {
             meetingMicDiarizationStartedAt = receivedAt;
           }
           meetingMicDiarizationStream.write(outboundBuffer);
+        } else if (meetingMicDiarizationPath) {
+          // Policy was disabled mid-call: revoke the archival attempt and erase
+          // the temporary mic copy; still transcribe and diarize system audio.
+          meetingArchiveCaptureEligible = false;
+          dropMeetingMicDiarizationCapture();
         }
 
         if (processMeetingMicWithAec(outboundBuffer)) {
@@ -9792,14 +9904,23 @@ class IPCHandlers {
             retractedSegments,
             diarizationStartedAt,
             diarizedSource,
+            closedTracks,
+            cleanupPcmPaths,
           } = await captureMeetingDiarizationState();
           const transcript =
             buildOrderedTranscriptText(diarizationSegments) || meetingLocalTranscript;
           const sessionSpeakerConfigSnapshot = this.activeMeetingSpeakerConfig;
           const noteIdSnapshot = meetingNoteId;
           const speakerIndexBaseSnapshot = meetingSpeakerIndexBase;
+          const archiveEligibleSnapshot = meetingArchiveCaptureEligible;
+          const archiveGenerationSnapshot = meetingArchiveCaptureGeneration;
           this.activeMeetingSpeakerConfig = null;
           resetMeetingLocalState();
+          await archiveAndCleanupClosedTracks({
+            noteId: noteIdSnapshot, recordingSessionId: expectedSessionId,
+            closedTracks, cleanupPcmPaths, eligibleAtStart: archiveEligibleSnapshot,
+            purgeGenerationAtStart: archiveGenerationSnapshot,
+          });
 
           // Fire-and-forget background diarization (or notify skip)
           this._startOrSkipDiarization(
@@ -9826,6 +9947,8 @@ class IPCHandlers {
           retractedSegments,
           diarizationStartedAt,
           diarizedSource,
+          closedTracks,
+          cleanupPcmPaths,
         } = await captureMeetingDiarizationState();
         const transcript =
           buildOrderedTranscriptText(diarizationSegments) ||
@@ -9834,7 +9957,14 @@ class IPCHandlers {
         const sessionSpeakerConfigSnapshot = this.activeMeetingSpeakerConfig;
         const noteIdSnapshot = meetingNoteId;
         const speakerIndexBaseSnapshot = meetingSpeakerIndexBase;
+        const archiveEligibleSnapshot = meetingArchiveCaptureEligible;
+        const archiveGenerationSnapshot = meetingArchiveCaptureGeneration;
         this.activeMeetingSpeakerConfig = null;
+        await archiveAndCleanupClosedTracks({
+          noteId: noteIdSnapshot, recordingSessionId: expectedSessionId,
+          closedTracks, cleanupPcmPaths, eligibleAtStart: archiveEligibleSnapshot,
+          purgeGenerationAtStart: archiveGenerationSnapshot,
+        });
 
         // Fire-and-forget background diarization (or notify skip)
         this._startOrSkipDiarization(
@@ -13243,6 +13373,9 @@ class IPCHandlers {
     if (!diarizationEnabled || !this.diarizationManager?.isAvailable() || !rawPcmPath) {
       sendProgress("preparing", "skipped");
       sendUndiarized();
+      // The async diarization branch handles its own raw PCM in finally; the
+      // skip branch must also clean its input now that archives have been made.
+      if (rawPcmPath) require("fs").unlink(rawPcmPath, () => {});
       return;
     }
     sendProgress("preparing");
@@ -13611,9 +13744,10 @@ class IPCHandlers {
     return result;
   }
 
-  deleteNoteInternal(id) {
+  async deleteNoteInternal(id) {
     const result = this.databaseManager.deleteNote(id);
     if (result?.success) {
+      await deleteArchivedMeetingNote({ userDataDir: app.getPath("userData"), noteId: id });
       setImmediate(() => broadcastToWindows("note-deleted", { id }));
       this.notifyVectorChanges();
       this._asyncMirrorDelete(id);
