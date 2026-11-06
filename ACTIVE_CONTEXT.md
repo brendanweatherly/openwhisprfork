@@ -1,5 +1,9 @@
 # ACTIVE CONTEXT - OpenWhispr Fork / Meeting Recorder
 
+**2026-11-06 verified continuation checkpoint:** Implemented guarded dual-track local PCM retention integration on `feat/meeting-audio-retention-20261106` (not merged); the original speaker branch remains untouched. The bounded GitHub workflow run [42288786791](https://github.com/brendanweatherly/openwhisprfork/actions/runs/42288786791) **passed** 283/287 focused tests (4 skipped, 0 failures), TypeScript validation, and renderer build. React SSR import interop required a narrowly scoped test fix after the first workflow failed 3/287. No private audio or transcripts were committed. No large artifacts or full release/Windows installer build were generated. **Not verified:** real Windows recording, retention/privacy across actual account lifecycles, reboot/installer, real Teams speaker labels; post-meeting Re-run Speaker Identification remains unimplemented.
+
+**Canonical next action (re-ranked 2026-11-06):** Implement the authorized re-run speaker-identification IPC/UI using retained note/session PCM with speaker-count controls, immutable transcript words and locked IDs/names, original state snapshots/undo, progress/error reporting, then run targeted synthetic tests. Windows/real Teams validation follows. Do not request repeated recordings to tune speaker counts.
+
 **Last updated:** 2026-10-30 - stage overlay committed; 9/9 native Node filesystem archive tests pass; live retention still pending
 **Current milestone:** Enable non-destructive speaker reprocessing from retained meeting audio
 **Active work ID:** `OW-AUDIO-RERUN-20261030`
