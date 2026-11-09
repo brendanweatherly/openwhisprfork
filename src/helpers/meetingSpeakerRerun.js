@@ -96,6 +96,52 @@ async function capRerunSpeakerGroups({
     unassignedNativeClusters: result.unassignedNativeClusters.length };
 }
 
+// Stable speaker numbers matter across reruns. Assign a prior number only
+// when the NEW group and the PREVIOUS group overwhelmingly agree on the same
+// transcript rows. Uncertain/split groups keep their new numbers; user locks
+// are still protected by the preview writer below.
+function matchStableRerunSpeakerIds(originalRows, selected, enriched) {
+  const byNew = new Map();
+  const byOld = new Map();
+  const valid = (id) => typeof id === "string" && /^speaker_\d+$/.test(id);
+  for (let i = 0; i < selected.length; i++) {
+    const previous = originalRows[selected[i].index];
+    const next = enriched[i];
+    if (isSpeakerLocked(previous) || !valid(previous.speaker) || !valid(next?.speaker)) continue;
+    const newId = next.speaker;
+    const oldId = previous.speaker;
+    if (!byNew.has(newId)) byNew.set(newId, { total: 0, old: new Map() });
+    const group = byNew.get(newId);
+    group.total++;
+    group.old.set(oldId, (group.old.get(oldId) || 0) + 1);
+    byOld.set(oldId, (byOld.get(oldId) || 0) + 1);
+  }
+  const candidates = [];
+  for (const [newId, group] of byNew) {
+    const ordered = [...group.old].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    const [oldId, support] = ordered[0] || [];
+    if (!oldId || support < 5) continue;
+    const second = ordered[1]?.[1] || 0;
+    const purity = support / group.total;
+    const coverage = support / byOld.get(oldId);
+    if (purity >= 0.8 && coverage >= 0.6 &&
+        (support - second) / group.total >= 0.3) {
+      candidates.push({ newId, oldId, support, purity });
+    }
+  }
+  candidates.sort((a, b) =>
+    b.support - a.support || b.purity - a.purity || a.newId.localeCompare(b.newId)
+  );
+  const stable = new Map();
+  const claimed = new Set();
+  for (const { newId, oldId } of candidates) {
+    if (claimed.has(oldId)) continue;
+    stable.set(newId, oldId);
+    claimed.add(oldId);
+  }
+  return stable;
+}
+
 function buildSpeakerRerunPreview({
   originalTranscript, sessionId, source, startedAt, bytes, diarizationSegments,
   diarizationManager,
@@ -111,8 +157,11 @@ function buildSpeakerRerunPreview({
   if (!Array.isArray(enriched) || enriched.length !== selected.length) {
     throw new Error("Speaker matching did not return every transcript row");
   }
+  const stableSpeakerIds = matchStableRerunSpeakerIds(rows, selected, enriched);
   const proposed = rows.map((row) => ({ ...row }));
   let changedCount = 0;
+  let newlyUnassignedCount = 0;
+  let changedFieldsCount = 0;
   let lockedCount = 0;
   for (let i = 0; i < selected.length; i++) {
     const { index } = selected[i];
@@ -131,13 +180,28 @@ function buildSpeakerRerunPreview({
         delete updated[key];
       }
     }
-    if (SPEAKER_FIELDS.some((key) => previous[key] !== updated[key])) changedCount++;
+    // The new acoustic numbers start after the existing ones to avoid an
+    // accidental ID collision. Reusing a prior ID requires reciprocal support.
+    if (stableSpeakerIds.has(updated.speaker)) {
+      updated.speaker = stableSpeakerIds.get(updated.speaker);
+    }
+    if (previous.speaker !== updated.speaker ||
+        (previous.speakerName || "") !== (updated.speakerName || "")) {
+      changedCount++;
+    }
+    if (previous.speaker && !updated.speaker) newlyUnassignedCount++;
+    if (SPEAKER_FIELDS.some((key) => previous[key] !== updated[key])) changedFieldsCount++;
   }
-  return { proposedTranscript: JSON.stringify(proposed), changedCount, lockedCount,
-    matchedCount: selected.length };
+  return {
+    proposedTranscript: JSON.stringify(proposed), changedCount,
+    changedFieldsCount, newlyUnassignedCount,
+    reusedSpeakerClusters: stableSpeakerIds.size,
+    lockedCount, matchedCount: selected.length,
+  };
 }
 
 module.exports = {
   validateRerunRequest, parseRerunTranscript, getRerunBaseIndex,
-  selectTimedSourceRows, capRerunSpeakerGroups, buildSpeakerRerunPreview,
+  selectTimedSourceRows, capRerunSpeakerGroups, matchStableRerunSpeakerIds,
+  buildSpeakerRerunPreview,
 };

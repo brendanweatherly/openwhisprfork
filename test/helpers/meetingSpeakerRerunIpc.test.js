@@ -142,3 +142,24 @@ test("permission revocation and Delete All Audio generation invalidate previews"
   assert.equal(stale.success,false);
   assert.equal(f.getWrites(),0);
 });
+
+test("a low-quality rerun cannot overwrite current names with mass Unknown labels",async(t)=>{
+  const f=await fixture(t);
+  const original=f.getNote().transcript;
+  f.context.diarizationManager.mergeWithTranscript=(rows)=>rows.map((row)=>({
+    ...row, speaker:undefined, speakerName:undefined,
+    speakerStatus:"unassigned", speakerIsPlaceholder:true,
+  }));
+  const p=await f.api.get("meeting-speaker-rerun-preview")({sender:f.owner},{
+    noteId:2,sessionId:"record-1",source:"system",expectedCount:3,
+  });
+  assert.equal(p.success,true,p.error);
+  assert.equal(p.applyAllowed,false);
+  assert.equal(p.newlyUnassignedCount,1);
+  assert.match(p.qualityWarning,/not safe to apply/);
+  const saved=await f.api.get("meeting-speaker-rerun-apply")({sender:f.owner},2,p.requestId);
+  assert.equal(saved.success,false);
+  assert.match(saved.error,/not safe to apply/);
+  assert.equal(f.getWrites(),0);
+  assert.equal(f.getNote().transcript,original);
+});

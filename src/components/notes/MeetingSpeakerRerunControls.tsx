@@ -10,6 +10,10 @@ type Preview = {
   changedCount: number;
   matchedCount: number;
   lockedCount: number;
+  newlyUnassignedCount: number;
+  reusedSpeakerClusters: number;
+  applyAllowed: boolean;
+  qualityWarning: string | null;
   detectedCount: number;
   appliedCap: number;
   method: string;
@@ -111,6 +115,10 @@ export default function MeetingSpeakerRerunControls({
         changedCount: response.changedCount ?? 0,
         matchedCount: response.matchedCount ?? 0,
         lockedCount: response.lockedCount ?? 0,
+        newlyUnassignedCount: response.newlyUnassignedCount ?? 0,
+        reusedSpeakerClusters: response.reusedSpeakerClusters ?? 0,
+        applyAllowed: response.applyAllowed ?? false,
+        qualityWarning: response.qualityWarning ?? null,
         detectedCount: response.detectedCount ?? 0,
         appliedCap: response.appliedCap ?? count,
         method: response.method ?? "native",
@@ -241,15 +249,22 @@ export default function MeetingSpeakerRerunControls({
           Preview ready: {preview.changedCount} speaker labels to change across {preview.matchedCount}
           {" "}timed statements; {preview.lockedCount} manually locked statements preserved.
           {" "}Detected acoustic groups: {preview.detectedCount}.
+          {" "}{preview.reusedSpeakerClusters} existing speaker identities retained.
+          {" "}{preview.newlyUnassignedCount} existing labels would become Unknown.
           {preview.method === "confidence-or-unassigned" &&
             " Acoustic groups without a reliable voice match remain unassigned rather than inheriting another person's label."}
+        </p>
+      )}
+      {preview?.qualityWarning && (
+        <p className="mt-3 text-xs text-destructive" role="alert">
+          {preview.qualityWarning} Applying these changes is disabled.
         </p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" variant="outline" disabled={busy || !sessionId} onClick={makePreview}>
           {busy ? "Processing..." : "Preview speaker labels"}
         </Button>
-        {preview && (
+        {preview?.applyAllowed && (
           <Button size="sm" disabled={busy} onClick={applyPreview}>Apply labels</Button>
         )}
         <Button size="sm" variant="ghost" disabled={busy} onClick={undo}>
@@ -258,6 +273,7 @@ export default function MeetingSpeakerRerunControls({
       </div>
       <p className="mt-2 text-[11px] text-muted-foreground">
         Undo is available locally for up to one hour, until the app restarts or the transcript changes.
+        Saving a transcript does not lock speaker labels; assigning a speaker name in the editor does.
         Older untagged recordings cannot be matched safely.
       </p>
     </section>

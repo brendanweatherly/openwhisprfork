@@ -115,6 +115,15 @@ function registerMeetingSpeakerRerunIpc({
       });
       // Native work may take minutes. Both audio permission and the original
       // transcript are rechecked; a stale run never publishes labels.
+      const newlyUnassignedShare = preview.matchedCount
+        ? preview.newlyUnassignedCount / preview.matchedCount : 0;
+      const badlyFragmented = capped.detectedCount > Math.max(10, capped.cap * 6);
+      // A preview is not evidence of better speaker identity. Do not allow
+      // one low-confidence batch to erase a large set of existing assignments.
+      const qualityWarning = newlyUnassignedShare > 0.25 ||
+        (badlyFragmented && newlyUnassignedShare > 0.10)
+        ? `Speaker result is not safe to apply: ${preview.newlyUnassignedCount} of ${preview.matchedCount} statements would lose their current speaker assignment, and ${capped.detectedCount} raw acoustic groups were detected. Keep the existing labels and retry with a better clustering result.`
+        : null;
       const [currentTrack, currentNote] = await Promise.all([
         source(noteId, sessionId, trackSource),
         Promise.resolve(context.databaseManager.getNote(noteId)),
@@ -133,11 +142,17 @@ function registerMeetingSpeakerRerunIpc({
         purgeGeneration, account, authGeneration,
         expiresAt: Date.now() + 20 * 60_000,
         changedCount: preview.changedCount,
+        applyAllowed: !qualityWarning, qualityWarning,
       });
-      return { success: true, requestId, changedCount: preview.changedCount,
+      return {
+        success: true, requestId, changedCount: preview.changedCount,
         matchedCount: preview.matchedCount, lockedCount: preview.lockedCount,
+        newlyUnassignedCount: preview.newlyUnassignedCount,
+        reusedSpeakerClusters: preview.reusedSpeakerClusters,
+        applyAllowed: !qualityWarning, qualityWarning,
         detectedCount: capped.detectedCount, appliedCap: capped.cap,
-        method: capped.method };
+        method: capped.method,
+      };
     } catch (error) {
       return deny(error);
     } finally {
@@ -155,6 +170,10 @@ function registerMeetingSpeakerRerunIpc({
           preview.account !== context.databaseManager.activeAccountId ||
           preview.authGeneration !== getAuthContext().generation) {
         throw new Error("Preview expired, note changed, or account changed; preview again");
+      }
+      if (!preview.applyAllowed) {
+        throw new Error(preview.qualityWarning ||
+          "Speaker identification quality is too low to overwrite existing labels");
       }
       const track = await source(noteId, preview.sessionId, preview.trackSource);
       if (!track) throw new Error("Archived audio is no longer available");

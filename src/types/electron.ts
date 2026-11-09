@@ -3446,6 +3446,10 @@ declare global {
         changedCount?: number;
         matchedCount?: number;
         lockedCount?: number;
+        newlyUnassignedCount?: number;
+        reusedSpeakerClusters?: number;
+        applyAllowed?: boolean;
+        qualityWarning?: string | null;
         detectedCount?: number;
         appliedCap?: number;
         method?: string;

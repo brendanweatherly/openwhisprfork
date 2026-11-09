@@ -3,7 +3,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   validateRerunRequest, selectTimedSourceRows, capRerunSpeakerGroups,
-  buildSpeakerRerunPreview,
+  buildSpeakerRerunPreview, matchStableRerunSpeakerIds,
 } = require("../../src/helpers/meetingSpeakerRerun");
 const base = { noteId: 2, sessionId: "d8-123", source: "system", expectedCount: 3 };
 const track = { sessionId: "d8-123", source: "system", startedAt: 1_700_000_000_000, bytes: 48000 * 12 };
@@ -91,4 +91,43 @@ test("caps explicit system speaker count to count minus self", async () => {
   assert.equal(result.unassignedNativeClusters,1);
   assert.ok(result.segments.some((s)=>s.speaker==="unassigned_acoustic"));
   assert.ok(result.segments.some((s)=>s.speaker==="speaker_0"));
+});
+
+test("stable reciprocal evidence reuses existing numeric IDs instead of renumbering all statements", () => {
+  const rows = Array.from({ length: 16 }, (_, index) => ({
+    speaker: index < 8 ? "speaker_1" : "speaker_2",
+    source: "system", recordingSessionId: "d8-123",
+    text: "Synthetic sentence " + index,
+    timestamp: index,
+    speakerStatus: "provisional",
+  }));
+  const enriched = rows.map((row, index) => ({
+    ...row, speaker: index < 8 ? "speaker_11" : "speaker_12",
+    speakerStatus: "confirmed",
+  }));
+  const selected = rows.map((segment, index) => ({index, segment}));
+  const mapping = matchStableRerunSpeakerIds(rows, selected, enriched);
+  assert.equal(mapping.get("speaker_11"), "speaker_1");
+  assert.equal(mapping.get("speaker_12"), "speaker_2");
+  const result = buildSpeakerRerunPreview({
+    originalTranscript: JSON.stringify(rows), ...track,
+    // A batch matcher might assign fresh numeric IDs, as normal diarization
+    // does with speakerIndexBase. This is *not* evidence of a changed voice.
+    diarizationManager: { mergeWithTranscript: () => enriched },
+    diarizationSegments: [{speaker:"speaker_0",start:0,end:16}],
+    bytes: 48000 * 20,
+  });
+  assert.equal(result.changedCount, 0, "existing identity must not look relabeled");
+  assert.equal(result.reusedSpeakerClusters, 2);
+  assert.ok(result.changedFieldsCount > 0, "metadata updates can differ from displayed labels");
+  assert.deepEqual(JSON.parse(result.proposedTranscript).map(r=>r.speaker),
+    rows.map(r=>r.speaker));
+});
+
+test("split or ambiguous candidate voices do not inherit a prior speaker number", () => {
+  const rows=Array.from({length:12},(_,i)=>({speaker:"speaker_1",text:"Synthetic "+i}));
+  const selected=rows.map((row,index)=>({index,segment:row}));
+  const enriched=rows.map((row,i)=>({...row,speaker:i<6?"speaker_3":"speaker_4"}));
+  assert.equal(matchStableRerunSpeakerIds(rows,selected,enriched).size,0,
+    "a one-to-many split must not masquerade as a stable identity");
 });

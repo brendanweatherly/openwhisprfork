@@ -10,7 +10,7 @@ const { getModelsDirForService } = require("./modelDirUtils");
 const { convertToWav } = require("./ffmpegUtils");
 const { getSafeTempDir } = require("./safeTempDir");
 const { applyConfirmedSpeaker, applyUnassignedSpeaker } = require("./speakerAssignmentPolicy");
-const { UNASSIGNED_ACOUSTIC_SPEAKER } = require("./diarizationPolicy");
+const { UNASSIGNED_ACOUSTIC_SPEAKER, resolveClusterThreshold } = require("./diarizationPolicy");
 const { buildSpeakerRenumber } = require("./speakerIndexBase");
 const sidecarPidFile = require("./sidecarPidFile");
 const {
@@ -263,7 +263,7 @@ class DiarizationManager {
   }
 
   async diarize(wavPath, options = {}) {
-    const { numSpeakers = -1, threshold = 0.55, signal = null } = options;
+    const { numSpeakers = -1, threshold: requestedThreshold = null, signal = null } = options;
 
     if (signal?.aborted) return [];
 
@@ -285,6 +285,16 @@ class DiarizationManager {
 
     const segPath = this._resolveModelPath(SEGMENTATION_ONNX);
     const embPath = this._resolveModelPath(EMBEDDING_ONNX);
+
+    // Meeting stop and post-meeting rerun both call diarize without explicit
+    // options. The old default 0.55 fragmented a 74-minute system recording
+    // into 89 acoustic groups, although the upload path already uses the
+    // duration-aware policy. Apply that same policy here for every entrypoint.
+    let durationSeconds = NaN;
+    try {
+      durationSeconds = fs.statSync(wavPath).size / PCM16_MONO_16K_BYTES_PER_SECOND;
+    } catch { /* An unknown duration preserves the short-audio default. */ }
+    const threshold = resolveClusterThreshold(durationSeconds, requestedThreshold);
 
     const args = [
       `--segmentation.pyannote-model=${segPath}`,
