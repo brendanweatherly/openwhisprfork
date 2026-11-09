@@ -86,13 +86,19 @@ jobs:
           1. Extract this GitHub Actions artifact ZIP to a folder.
           2. Double-click START_OPENWHISPR_TEST.bat (not the EXE directly).
           3. This launches a separate staging profile, not the installed app's notes.
-          4. Make a NEW disposable sample recording, then stop it.
+          4. Open the previously captured test meeting in your staging profile.
+             Use the EXISTING retained local audio; no new recording is needed.
           5. On the transcript page choose Re-run speaker identification.
-          6. Select the recorded track, adjust total speakers, then Preview.
-          7. Apply the speaker labels and test Undo.
-          8. Verify transcript words and manually locked speakers remain unchanged.
-          9. If no saved recording appears, inspect app retention preferences.
-          10. Never treat this unsigned acceptance build as a production release.
+          6. Select the system track, choose total speaker count, then Preview.
+          7. Record detected acoustic groups, stable speaker IDs and Unknown changes.
+          8. If a low-confidence warning appears, Apply is intentionally disabled.
+          9. If a safe preview is available, Apply then Undo and verify all text
+             and manually locked speaker names remain intact.
+          10. This build is for testing only; do not install over production.
+
+          IMPORTANT: The old build's high-fragmentation labels may already be
+          saved to your note. If so, this new preview compares against the
+          CURRENT note, not the earlier exported backup. Keep that backup.
 
           Windows SmartScreen may warn because this build is deliberately unsigned.
           This package is an unreleased testing build from your GitHub branch.
@@ -103,7 +109,7 @@ jobs:
       - name: Upload only portable test files (3-day retention)
         uses: actions/upload-artifact@v4
         with:
-          name: OpenWhispr-Fork-Portable-Test-Windows
+          name: OpenWhispr-Fork-Long-Meeting-Fix-20261109
           path: portable-test/*
           if-no-files-found: error
           retention-days: 3
